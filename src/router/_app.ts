@@ -6,6 +6,7 @@ import { progressRouter } from "./progress";
 import { grammarRouter } from "./grammar";
 import { vocabularyRouter } from "./vocabulary";
 import { roomsRouter } from "./rooms";
+import { aiRouter } from "./ai";
 
 export const appRouter = router({
   users: usersRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   grammar: grammarRouter,
   vocabulary: vocabularyRouter,
   rooms: roomsRouter,
+  ai: aiRouter,
 });
 
 export type AppRouter = typeof appRouter;

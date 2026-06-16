@@ -9,13 +9,20 @@ import { stream } from "hono/streaming";
 import dotenv from "dotenv";
 import { appRouter } from "./router/_app";
 import { createContext } from "./trpc";
+import { supabase } from "./lib/supabase";
+import { stream as groqStream } from "./services/groq";
+import { buildMessages, sanitizeInput } from "./lib/prompts";
 
 dotenv.config();
 
 const app = new Hono();
 
 app.use("*", logger());
-app.use("*", cors({ origin: process.env.ALLOWED_ORIGINS?.split(",") ?? "*" }));
+app.use("*", cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(",") ?? "*",
+  allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+}));
 app.use("*", secureHeaders());
 app.use("*", prettyJSON());
 
@@ -23,7 +30,7 @@ app.get("/health", (c) =>
   c.json({ status: "ok", version: "1.0.0", timestamp: new Date().toISOString() }),
 );
 
-// tRPC — handles all typed API procedures
+// tRPC — all typed procedures
 app.use(
   "/trpc/*",
   trpcServer({
@@ -32,33 +39,100 @@ app.use(
   }),
 );
 
-// SSE streaming — AI chat (native Hono for real-time streaming)
+// ─── AI Chat — SSE Streaming ─────────────────────────────────────────────────
 app.post("/ai/stream", async (c) => {
+  // 1. Auth
   const token = c.req.header("Authorization")?.replace("Bearer ", "");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
 
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  // 2. Parse body
+  let body: {
+    message: string;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);
+
+  // 3. Get user profile for context
+  const { data: user } = await supabase
+    .from("users")
+    .select("display_name, cefr_level, goal, domain, accent_preference")
+    .eq("auth_id", authData.user.id)
+    .single();
+
+  // 4. Get recent error patterns
+  const { data: recentErrors } = await supabase
+    .from("user_errors")
+    .select("error_category")
+    .eq("user_id", authData.user.id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const topErrors = [
+    ...new Set(recentErrors?.map((e) => e.error_category) ?? []),
+  ].slice(0, 3);
+
+  // 5. Build messages
+  const userCtx = {
+    displayName: user?.display_name ?? "Student",
+    cefrLevel: user?.cefr_level ?? "B1",
+    goal: user?.goal ?? "general",
+    domain: user?.domain ?? "general",
+    accentPreference: user?.accent_preference ?? "american",
+    topErrors,
+  };
+
+  const messages = buildMessages(
+    userCtx,
+    body.history ?? [],
+    sanitizeInput(body.message),
+  );
+
+  // 6. Stream from Groq via SSE
+  c.header("Content-Type", "text/event-stream");
+  c.header("Cache-Control", "no-cache");
+  c.header("X-Accel-Buffering", "no");
+
   return stream(c, async (s) => {
-    // Groq streaming integration will be implemented in Sprint 5
-    await s.write("data: {\"type\":\"token\",\"content\":\"\"}\n\n");
-    await s.write("data: {\"type\":\"done\"}\n\n");
+    try {
+      let fullResponse = "";
+
+      for await (const chunk of groqStream(messages, {
+        model: "primary",
+        temperature: 0.7,
+        maxTokens: 512,
+      })) {
+        fullResponse += chunk;
+        await s.write(`data: ${JSON.stringify({ type: "token", content: chunk })}\n\n`);
+      }
+
+      await s.write(`data: ${JSON.stringify({ type: "done", fullResponse })}\n\n`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "AI service error";
+      await s.write(`data: ${JSON.stringify({ type: "error", message })}\n\n`);
+    }
   });
 });
 
-// SSE streaming — TTS synthesis (native Hono for audio chunk streaming)
+// ─── TTS Synthesis — Sprint 9 ────────────────────────────────────────────────
 app.post("/speech/synthesize", async (c) => {
   const token = c.req.header("Authorization")?.replace("Bearer ", "");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
-
-  // ElevenLabs streaming integration will be implemented in Sprint 9
-  return c.json({ message: "TTS endpoint — implementation in Sprint 9" });
+  return c.json({ message: "TTS — Sprint 9" });
 });
 
-// STT transcription — multipart audio upload
+// ─── STT Transcription — Sprint 4 ───────────────────────────────────────────
 app.post("/speech/transcribe", async (c) => {
   const token = c.req.header("Authorization")?.replace("Bearer ", "");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
-
-  // Whisper STT integration will be implemented in Sprint 4
   return c.json({ transcript: "" });
 });
 
