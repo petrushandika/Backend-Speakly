@@ -1,54 +1,65 @@
-import { router, protectedProcedure } from "../trpc";
-import { supabase } from "../lib/supabase";
+import { eq, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { router, protectedProcedure } from "../trpc";
+import { db } from "../db";
+import { users, userProgress, userErrors, flashcards } from "../db/schema";
 
 export const progressRouter = router({
   getSummary: protectedProcedure.query(async ({ ctx }) => {
-    const { data: user } = await supabase
-      .from("users")
-      .select("total_xp, current_streak, longest_streak, cefr_level, cefr_score")
-      .eq("auth_id", ctx.userId)
-      .single();
-
-    const { data: skills } = await supabase
-      .from("user_skills")
-      .select("*")
-      .eq("user_id", ctx.userId)
-      .single();
-
-    return { user, skills };
-  }),
-
-  getStreak: protectedProcedure.query(async ({ ctx }) => {
-    const { data } = await supabase
-      .from("daily_progress")
-      .select("date, xp_earned, activities_completed, streak_day")
-      .eq("user_id", ctx.userId)
-      .order("date", { ascending: false })
-      .limit(90);
-
-    return data ?? [];
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: {
+        xpTotal: true,
+        streakDays: true,
+        cefrLevel: true,
+        goal: true,
+      },
+    });
+    if (!user) throw new TRPCError({ code: "NOT_FOUND" });
+    return user;
   }),
 
   getErrors: protectedProcedure.query(async ({ ctx }) => {
-    const { data } = await supabase
-      .from("user_errors")
-      .select("*")
-      .eq("user_id", ctx.userId)
-      .order("created_at", { ascending: false })
-      .limit(100);
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true },
+    });
+    if (!user) return [];
 
-    return data ?? [];
+    return db.query.userErrors.findMany({
+      where: eq(userErrors.userId, user.id),
+      orderBy: (e, { desc }) => desc(e.createdAt),
+      limit: 100,
+    });
   }),
 
-  getSkills: protectedProcedure.query(async ({ ctx }) => {
-    const { data, error } = await supabase
-      .from("user_skills")
-      .select("*")
-      .eq("user_id", ctx.userId)
-      .single();
+  getRecentProgress: protectedProcedure.query(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true },
+    });
+    if (!user) return [];
 
-    if (error) throw new TRPCError({ code: "NOT_FOUND" });
-    return data;
+    return db.query.userProgress.findMany({
+      where: eq(userProgress.userId, user.id),
+      orderBy: (p, { desc }) => desc(p.completedAt),
+      limit: 30,
+      with: { lesson: { columns: { title: true, category: true } } },
+    });
+  }),
+
+  getDueFlashcardsCount: protectedProcedure.query(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true },
+    });
+    if (!user) return { count: 0 };
+
+    const due = await db.query.flashcards.findMany({
+      where: eq(flashcards.userId, user.id),
+      columns: { id: true },
+    });
+
+    return { count: due.length };
   }),
 });

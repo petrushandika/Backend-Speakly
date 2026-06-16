@@ -1,85 +1,99 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../trpc";
-import { supabase } from "../lib/supabase";
+import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-
-function generateRoomCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
+import { router, protectedProcedure } from "../trpc";
+import { db } from "../db";
+import { rooms, roomMembers, users } from "../db/schema";
 
 export const roomsRouter = router({
+  getActive: protectedProcedure.query(async () => {
+    return db.query.rooms.findMany({
+      where: eq(rooms.isActive, true),
+      with: { members: true, host: { columns: { displayName: true } } },
+      limit: 20,
+    });
+  }),
+
   create: protectedProcedure
     .input(
       z.object({
-        cefrLevel: z.enum(["A1", "A2", "B1", "B2", "C1", "C2"]).optional(),
+        name:  z.string().min(1).max(100),
         topic: z.string().optional(),
-        durationMins: z.union([z.literal(5), z.literal(10), z.literal(15)]).default(10),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const roomCode = generateRoomCode();
-
-      const { data: room, error } = await supabase
-        .from("peer_rooms")
-        .insert({
-          room_code: roomCode,
-          host_id: ctx.userId,
-          cefr_level: input.cefrLevel,
-          topic: input.topic,
-          duration_mins: input.durationMins,
-        })
-        .select()
-        .single();
-
-      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
-
-      await supabase.from("room_participants").insert({
-        room_id: room.id,
-        user_id: ctx.userId,
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
       });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const [room] = await db
+        .insert(rooms)
+        .values({ name: input.name, topic: input.topic, hostId: user.id })
+        .returning();
+
+      // Host joins automatically
+      await db.insert(roomMembers).values({ roomId: room.id, userId: user.id });
 
       return room;
     }),
 
   join: protectedProcedure
-    .input(z.object({ roomCode: z.string().length(6) }))
-    .mutation(async ({ ctx, input }) => {
-      const { data: room, error } = await supabase
-        .from("peer_rooms")
-        .select("*")
-        .eq("room_code", input.roomCode.toUpperCase())
-        .eq("status", "waiting")
-        .single();
-
-      if (error || !room) throw new TRPCError({ code: "NOT_FOUND", message: "Room not found" });
-
-      await supabase.from("room_participants").insert({
-        room_id: room.id,
-        user_id: ctx.userId,
-      });
-
-      await supabase.from("peer_rooms").update({ status: "active", started_at: new Date().toISOString() }).eq("id", room.id);
-
-      return room;
-    }),
-
-  getActive: protectedProcedure
-    .input(z.object({ cefrLevel: z.string().optional() }))
-    .query(async ({ input }) => {
-      let query = supabase.from("peer_rooms").select("*, room_participants(count)").eq("status", "waiting");
-      if (input.cefrLevel) query = query.eq("cefr_level", input.cefrLevel);
-
-      const { data } = await query.limit(10);
-      return data ?? [];
-    }),
-
-  end: protectedProcedure
     .input(z.object({ roomId: z.string().uuid() }))
-    .mutation(async ({ input }) => {
-      await supabase
-        .from("peer_rooms")
-        .update({ status: "ended", ended_at: new Date().toISOString() })
-        .eq("id", input.roomId);
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const room = await db.query.rooms.findFirst({
+        where: and(eq(rooms.id, input.roomId), eq(rooms.isActive, true)),
+        with: { members: true },
+      });
+      if (!room) throw new TRPCError({ code: "NOT_FOUND", message: "Room not found" });
+      if (room.members.length >= room.maxMembers) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Room is full" });
+      }
+
+      await db
+        .insert(roomMembers)
+        .values({ roomId: input.roomId, userId: user.id })
+        .onConflictDoNothing();
+
+      return { success: true };
+    }),
+
+  leave: protectedProcedure
+    .input(z.object({ roomId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await db
+        .delete(roomMembers)
+        .where(and(eq(roomMembers.roomId, input.roomId), eq(roomMembers.userId, user.id)));
+
+      return { success: true };
+    }),
+
+  close: protectedProcedure
+    .input(z.object({ roomId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await db
+        .update(rooms)
+        .set({ isActive: false })
+        .where(and(eq(rooms.id, input.roomId), eq(rooms.hostId, user.id)));
 
       return { success: true };
     }),

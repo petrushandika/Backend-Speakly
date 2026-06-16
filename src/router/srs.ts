@@ -1,7 +1,9 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../trpc";
-import { supabase } from "../lib/supabase";
+import { eq, and, lte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { router, protectedProcedure } from "../trpc";
+import { db } from "../db";
+import { flashcards, users } from "../db/schema";
 
 function calculateNextReview(
   easeFactor: number,
@@ -9,9 +11,7 @@ function calculateNextReview(
   repetitions: number,
   quality: number,
 ): { easeFactor: number; interval: number; repetitions: number } {
-  if (quality < 3) {
-    return { easeFactor, interval: 1, repetitions: 0 };
-  }
+  if (quality < 3) return { easeFactor, interval: 1, repetitions: 0 };
 
   const newEF = Math.max(
     1.3,
@@ -28,41 +28,44 @@ function calculateNextReview(
 
 export const srsRouter = router({
   getDue: protectedProcedure.query(async ({ ctx }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true },
+    });
+    if (!user) return [];
 
-    const { data, error } = await supabase
-      .from("srs_cards")
-      .select("*")
-      .eq("user_id", ctx.userId)
-      .lte("due_date", today)
-      .eq("is_suspended", false)
-      .limit(20);
-
-    if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
-    return data ?? [];
+    return db.query.flashcards.findMany({
+      where: and(
+        eq(flashcards.userId, user.id),
+        lte(flashcards.dueDate, new Date()),
+      ),
+      limit: 20,
+      orderBy: (f, { asc }) => asc(f.dueDate),
+    });
   }),
 
   submitReview: protectedProcedure
     .input(
       z.object({
-        cardId: z.string().uuid(),
+        cardId:  z.string().uuid(),
         quality: z.number().int().min(0).max(5),
-        responseTimeMs: z.number().int().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { data: card, error: fetchError } = await supabase
-        .from("srs_cards")
-        .select("ease_factor, interval, repetitions")
-        .eq("id", input.cardId)
-        .eq("user_id", ctx.userId)
-        .single();
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      if (fetchError || !card) throw new TRPCError({ code: "NOT_FOUND" });
+      const card = await db.query.flashcards.findFirst({
+        where: and(eq(flashcards.id, input.cardId), eq(flashcards.userId, user.id)),
+      });
+      if (!card) throw new TRPCError({ code: "NOT_FOUND" });
 
       const next = calculateNextReview(
-        Number(card.ease_factor),
-        card.interval,
+        card.easeFactor,
+        card.intervalDays,
         card.repetitions,
         input.quality,
       );
@@ -70,50 +73,62 @@ export const srsRouter = router({
       const nextDue = new Date();
       nextDue.setDate(nextDue.getDate() + next.interval);
 
-      await supabase.from("srs_cards").update({
-        ease_factor: next.easeFactor,
-        interval: next.interval,
-        repetitions: next.repetitions,
-        quality_last: input.quality,
-        due_date: nextDue.toISOString().split("T")[0],
-        last_reviewed: new Date().toISOString(),
-        times_seen: supabase.rpc("increment", { x: 1 }),
-        times_correct: input.quality >= 3 ? supabase.rpc("increment", { x: 1 }) : undefined,
-      }).eq("id", input.cardId);
+      await db
+        .update(flashcards)
+        .set({
+          easeFactor:   next.easeFactor,
+          intervalDays: next.interval,
+          repetitions:  next.repetitions,
+          dueDate:      nextDue,
+        })
+        .where(eq(flashcards.id, input.cardId));
 
-      await supabase.from("srs_reviews").insert({
-        user_id: ctx.userId,
-        card_id: input.cardId,
-        quality: input.quality,
-        response_time_ms: input.responseTimeMs,
-      });
-
-      return { success: true, nextInterval: next.interval };
+      return { success: true, nextIntervalDays: next.interval };
     }),
 
   addCard: protectedProcedure
     .input(
       z.object({
-        cardType: z.enum(["vocabulary", "verb", "grammar", "phrase", "idiom"]),
-        referenceId: z.string().uuid(),
-        cardFace: z.string(),
-        cardBack: z.string(),
+        front:   z.string().min(1).max(500),
+        back:    z.string().min(1).max(500),
+        example: z.string().optional(),
+        tags:    z.array(z.string()).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { data, error } = await supabase
-        .from("srs_cards")
-        .insert({
-          user_id: ctx.userId,
-          card_type: input.cardType,
-          reference_id: input.referenceId,
-          card_face: input.cardFace,
-          card_back: input.cardBack,
-        })
-        .select()
-        .single();
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
-      return data;
+      const [card] = await db
+        .insert(flashcards)
+        .values({
+          userId:  user.id,
+          front:   input.front,
+          back:    input.back,
+          example: input.example,
+          tags:    input.tags ?? [],
+        })
+        .returning();
+
+      return card;
+    }),
+
+  deleteCard: protectedProcedure
+    .input(z.object({ cardId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await db
+        .delete(flashcards)
+        .where(and(eq(flashcards.id, input.cardId), eq(flashcards.userId, user.id)));
+
+      return { success: true };
     }),
 });

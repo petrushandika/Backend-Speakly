@@ -1,72 +1,54 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../trpc";
-import { supabase } from "../lib/supabase";
+import { eq, ilike } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { router, protectedProcedure } from "../trpc";
+import { db } from "../db";
+import { userErrors, users } from "../db/schema";
 
 export const grammarRouter = router({
-  getAllTenses: protectedProcedure.query(async ({ ctx }) => {
-    const { data: tenses } = await supabase
-      .from("grammar_points")
-      .select("id, title, slug, cefr_level, order_index")
-      .eq("category", "tenses")
-      .order("order_index");
-
-    const { data: progress } = await supabase
-      .from("tense_progress")
-      .select("tense_slug, status, mastery_score")
-      .eq("user_id", ctx.userId);
-
-    const progressMap = new Map(progress?.map((p) => [p.tense_slug, p]) ?? []);
-
-    return (tenses ?? []).map((t) => ({
-      ...t,
-      progress: progressMap.get(t.slug) ?? { status: "not_started", mastery_score: 0 },
-    }));
-  }),
-
-  getTenseBySlug: protectedProcedure
-    .input(z.object({ slug: z.string() }))
+  getErrors: protectedProcedure
+    .input(z.object({ category: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const { data: tense } = await supabase
-        .from("grammar_points")
-        .select("*")
-        .eq("slug", input.slug)
-        .single();
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) return [];
 
-      if (!tense) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const { data: progress } = await supabase
-        .from("tense_progress")
-        .select("*")
-        .eq("user_id", ctx.userId)
-        .eq("tense_slug", input.slug)
-        .single();
-
-      return { tense, progress };
+      return db.query.userErrors.findMany({
+        where: eq(userErrors.userId, user.id),
+        orderBy: (e, { desc }) => desc(e.createdAt),
+        limit: 50,
+      });
     }),
 
-  submitDrill: protectedProcedure
+  saveError: protectedProcedure
     .input(
       z.object({
-        tenseSlug: z.string(),
-        answers: z.array(z.object({ questionId: z.string(), answer: z.string() })),
-        correct: z.number().int().min(0),
-        total: z.number().int().min(1),
+        errorCategory: z.string(),
+        originalText:  z.string(),
+        correctedText: z.string().optional(),
+        context:       z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const accuracy = (input.correct / input.total) * 100;
-
-      await supabase.from("tense_progress").upsert({
-        user_id: ctx.userId,
-        tense_slug: input.tenseSlug,
-        mastery_score: Math.round(accuracy),
-        status: accuracy >= 80 ? "mastered" : "in_progress",
-        last_practiced: new Date().toISOString(),
-        attempts: supabase.rpc("increment", { x: 1 }),
-        correct: supabase.rpc("increment", { x: input.correct }),
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
       });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      return { accuracy, mastered: accuracy >= 80 };
+      const [error] = await db
+        .insert(userErrors)
+        .values({
+          userId:        user.id,
+          errorCategory: input.errorCategory,
+          originalText:  input.originalText,
+          correctedText: input.correctedText,
+          context:       input.context,
+        })
+        .returning();
+
+      return error;
     }),
 });

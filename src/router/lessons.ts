@@ -1,47 +1,98 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../trpc";
-import { supabase } from "../lib/supabase";
+import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { router, protectedProcedure } from "../trpc";
+import { db } from "../db";
+import { lessons, userProgress, users } from "../db/schema";
 
 export const lessonsRouter = router({
-  getDaily: protectedProcedure.query(async ({ ctx }) => {
-    const today = new Date().toISOString().split("T")[0];
+  getAll: protectedProcedure
+    .input(z.object({ cefrLevel: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true, cefrLevel: true },
+      });
 
-    const { data, error } = await supabase
-      .from("daily_lessons")
-      .select("*, verbs(*), grammar_points(*), reading_passages(*)")
-      .eq("auth_id", ctx.userId)
-      .eq("lesson_date", today)
-      .single();
+      const allLessons = await db.query.lessons.findMany({
+        where: and(
+          eq(lessons.isActive, true),
+          input?.cefrLevel
+            ? eq(lessons.cefrLevel, input.cefrLevel)
+            : user?.cefrLevel
+              ? eq(lessons.cefrLevel, user.cefrLevel)
+              : undefined,
+        ),
+        orderBy: (l, { asc }) => asc(l.orderIndex),
+      });
 
-    if (error || !data) throw new TRPCError({ code: "NOT_FOUND", message: "No lesson for today" });
-    return data;
-  }),
+      if (!user) return allLessons.map((l) => ({ ...l, progress: null }));
+
+      const progress = await db.query.userProgress.findMany({
+        where: eq(userProgress.userId, user.id),
+        columns: { lessonId: true, status: true, score: true, xpEarned: true },
+      });
+
+      const progressMap = new Map(progress.map((p) => [p.lessonId, p]));
+
+      return allLessons.map((l) => ({
+        ...l,
+        progress: progressMap.get(l.id) ?? null,
+      }));
+    }),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const lesson = await db.query.lessons.findFirst({
+        where: eq(lessons.id, input.id),
+      });
+      if (!lesson) throw new TRPCError({ code: "NOT_FOUND" });
+      return lesson;
+    }),
 
   complete: protectedProcedure
     .input(
       z.object({
         lessonId: z.string().uuid(),
-        activity: z.enum(["verb", "vocab", "grammar", "reading", "speaking"]),
-        xp: z.number().int().min(0),
+        score:    z.number().int().min(0).max(100),
+        xpEarned: z.number().int().min(0),
       }),
     )
-    .mutation(async ({ input }) => {
-      const field = `${input.activity}_done`;
-      const xpField = `${input.activity}_xp`;
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const { data, error } = await supabase
-        .from("daily_lessons")
-        .update({
-          [field]: true,
-          [`${field}_at`]: new Date().toISOString(),
-          [xpField]: input.xp,
+      const [result] = await db
+        .insert(userProgress)
+        .values({
+          userId:      user.id,
+          lessonId:    input.lessonId,
+          status:      "completed",
+          score:       input.score,
+          xpEarned:    input.xpEarned,
+          completedAt: new Date(),
         })
-        .eq("id", input.lessonId)
-        .select()
-        .single();
+        .onConflictDoUpdate({
+          target: [userProgress.userId, userProgress.lessonId],
+          set: {
+            status:      "completed",
+            score:       input.score,
+            xpEarned:    input.xpEarned,
+            completedAt: new Date(),
+          },
+        })
+        .returning();
 
-      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
-      return data;
+      // Add XP to user total
+      await db
+        .update(users)
+        .set({ xpTotal: db.$count(userProgress) })
+        .where(eq(users.id, user.id));
+
+      return result;
     }),
 });

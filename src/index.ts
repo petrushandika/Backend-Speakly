@@ -6,10 +6,13 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { prettyJSON } from "hono/pretty-json";
 import { stream } from "hono/streaming";
+import { eq, desc } from "drizzle-orm";
 import dotenv from "dotenv";
 import { appRouter } from "./router/_app";
 import { createContext } from "./trpc";
 import { supabase } from "./lib/supabase";
+import { db } from "./db";
+import { users, userErrors } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
 import { buildMessages, sanitizeInput } from "./lib/prompts";
 
@@ -41,7 +44,7 @@ app.use(
 
 // ─── AI Chat — SSE Streaming ─────────────────────────────────────────────────
 app.post("/ai/stream", async (c) => {
-  // 1. Auth
+  // 1. Auth via Supabase JWT
   const token = c.req.header("Authorization")?.replace("Bearer ", "");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
 
@@ -58,35 +61,40 @@ app.post("/ai/stream", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-
   if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);
 
-  // 3. Get user profile for context
-  const { data: user } = await supabase
-    .from("users")
-    .select("display_name, cefr_level, goal, domain, accent_preference")
-    .eq("auth_id", authData.user.id)
-    .single();
+  // 3. Get user profile via Drizzle
+  const user = await db.query.users.findFirst({
+    where: eq(users.authId, authData.user.id),
+    columns: {
+      id: true,
+      displayName: true,
+      cefrLevel: true,
+      goal: true,
+      domain: true,
+      accentPreference: true,
+    },
+  });
 
-  // 4. Get recent error patterns
-  const { data: recentErrors } = await supabase
-    .from("user_errors")
-    .select("error_category")
-    .eq("user_id", authData.user.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  // 4. Get recent error patterns via Drizzle
+  const recentErrors = user
+    ? await db.query.userErrors.findMany({
+        where: eq(userErrors.userId, user.id),
+        orderBy: (e, { desc }) => desc(e.createdAt),
+        limit: 20,
+        columns: { errorCategory: true },
+      })
+    : [];
 
-  const topErrors = [
-    ...new Set(recentErrors?.map((e) => e.error_category) ?? []),
-  ].slice(0, 3);
+  const topErrors = [...new Set(recentErrors.map((e) => e.errorCategory))].slice(0, 3);
 
-  // 5. Build messages
+  // 5. Build messages for Groq
   const userCtx = {
-    displayName: user?.display_name ?? "Student",
-    cefrLevel: user?.cefr_level ?? "B1",
-    goal: user?.goal ?? "general",
-    domain: user?.domain ?? "general",
-    accentPreference: user?.accent_preference ?? "american",
+    displayName:      user?.displayName      ?? "Student",
+    cefrLevel:        user?.cefrLevel        ?? "B1",
+    goal:             user?.goal             ?? "general",
+    domain:           user?.domain           ?? "general",
+    accentPreference: user?.accentPreference ?? "american",
     topErrors,
   };
 
@@ -136,7 +144,7 @@ app.post("/speech/transcribe", async (c) => {
   return c.json({ transcript: "" });
 });
 
-const PORT = parseInt(process.env.PORT ?? "3001");
+const PORT = parseInt(process.env.PORT ?? "8099");
 
 serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`speakly-api running on http://localhost:${PORT}`);
