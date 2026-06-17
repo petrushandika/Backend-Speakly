@@ -15,7 +15,7 @@ import { db } from "./db";
 import { users } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
 import { buildMessages, sanitizeInput } from "./lib/prompts";
-import { getLearningContext } from "./services/learning-context";
+import { get } from "./services/context";
 import { transcribe } from "./services/whisper";
 import { synthesize } from "./services/elevenlabs";
 
@@ -73,11 +73,11 @@ app.post("/ai/stream", async (c) => {
     columns: { id: true },
   });
 
-  // 4. Build rich learning context (Redis-cached, 5 min TTL)
+  // 4. Build rich context (Redis-cached, 5 min TTL)
   let userCtx;
   if (user) {
     try {
-      const ctx = await getLearningContext(user.id);
+      const ctx = await get(user.id);
       userCtx = {
         displayName:      ctx.displayName,
         cefrLevel:        ctx.cefrLevel,

@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import { userErrors, users } from "../db/schema";
-import { invalidateLearningContext } from "../services/learning-context";
+import { invalidate } from "../services/context";
 
 export const grammarRouter = router({
   getErrors: protectedProcedure
@@ -51,7 +51,7 @@ export const grammarRouter = router({
         .returning();
 
       // Invalidate cached learning context so AI gets fresh error data
-      await invalidateLearningContext(user.id);
+      await invalidate(user.id);
 
       return error;
     }),
@@ -84,7 +84,7 @@ export const grammarRouter = router({
         })),
       );
 
-      await invalidateLearningContext(user.id);
+      await invalidate(user.id);
 
       return { saved: input.length };
     }),
