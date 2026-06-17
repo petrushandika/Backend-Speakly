@@ -8,7 +8,7 @@ import { userErrors, users } from "../db/schema";
 export const grammarRouter = router({
   getErrors: protectedProcedure
     .input(z.object({ category: z.string().optional() }).optional())
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx }) => {
       const user = await db.query.users.findFirst({
         where: eq(users.authId, ctx.userId),
         columns: { id: true },
@@ -50,5 +50,36 @@ export const grammarRouter = router({
         .returning();
 
       return error;
+    }),
+
+  saveBatch: protectedProcedure
+    .input(
+      z.array(
+        z.object({
+          errorCategory: z.string(),
+          originalText:  z.string(),
+          correctedText: z.string().optional(),
+          context:       z.string().optional(),
+        }),
+      ).min(1).max(20),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await db.insert(userErrors).values(
+        input.map((e) => ({
+          userId:        user.id,
+          errorCategory: e.errorCategory,
+          originalText:  e.originalText,
+          correctedText: e.correctedText,
+          context:       e.context,
+        })),
+      );
+
+      return { saved: input.length };
     }),
 });
