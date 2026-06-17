@@ -237,6 +237,185 @@ const LESSONS = [
       ],
     },
   },
+  {
+    title: "Advanced Inversions",
+    description: "Use inversion to add emphasis and rhetorical flair to your sentences.",
+    cefrLevel: "C1",
+    category: "grammar",
+    orderIndex: 8,
+    content: {
+      sections: [
+        {
+          type: "explanation",
+          text: "When starting a sentence with a negative or limiting adverb (e.g., rarely, never, seldom, little), invert the subject and auxiliary verb for emphasis.",
+        },
+        {
+          type: "examples",
+          items: [
+            { en: "Rarely have I seen such a beautiful sunset.", id: "Jarang sekali saya melihat matahari terbenam seindah itu." },
+            { en: "Not only did she win the competition, but she also broke the record.", id: "Tidak hanya dia memenangkan kompetisi, tetapi dia juga memecahkan rekor." },
+            { en: "Little did he know that the surprise was waiting for him.", id: "Sedikit yang dia tahu bahwa kejutan sedang menunggunya." },
+          ],
+        },
+        {
+          type: "tip",
+          text: "Inversions are highly formal and are mostly used in academic writing, literature, and formal speeches.",
+        },
+      ],
+      exercises: [
+        { question: "Never ___ (I / see) such dedication.", answer: "have I seen" },
+        { question: "Not only ___ (he / forget) his keys, but he also lost his wallet.", answer: "did he forget" },
+      ],
+    },
+  },
+  {
+    title: "Past Modals of Deduction",
+    description: "Express certainty, possibility, and regret about past events.",
+    cefrLevel: "C1",
+    category: "grammar",
+    orderIndex: 9,
+    content: {
+      sections: [
+        {
+          type: "explanation",
+          text: "Use **must have + V3** for past certainty, **might/may/could have + V3** for past possibility, and **should have + V3** for past regrets or unfulfilled expectations.",
+        },
+        {
+          type: "examples",
+          items: [
+            { en: "He must have forgotten our meeting.", id: "Dia pasti lupa tentang pertemuan kita." },
+            { en: "I should have studied harder.", id: "Saya seharusnya belajar lebih giat." },
+            { en: "They could have won if they had tried harder.", id: "Mereka bisa saja menang jika mereka berusaha lebih keras." },
+          ],
+        },
+      ],
+      exercises: [
+        { question: "She isn't here yet. She ___ (must / miss) the train.", answer: "must have missed" },
+        { question: "I ___ (should / tell) him the truth, but I didn't.", answer: "should have told" },
+      ],
+    },
+  },
+  {
+    title: "Cleft Sentences for Emphasis",
+    description: "Restructure sentences to highlight specific information.",
+    cefrLevel: "C2",
+    category: "grammar",
+    orderIndex: 10,
+    content: {
+      sections: [
+        {
+          type: "explanation",
+          text: "Cleft sentences use introductory phrases like **It is/was... that/who** or **What... is/was** to focus on a particular part of a sentence.",
+        },
+        {
+          type: "examples",
+          items: [
+            { en: "It was John who made the final decision.", id: "John-lah yang membuat keputusan akhir." },
+            { en: "What I really need is a long vacation.", id: "Yang benar-benar saya butuhkan adalah liburan panjang." },
+            { en: "It is the economy that worries the voters most.", id: "Ekonomi-lah yang paling mengkhawatirkan para pemilih." },
+          ],
+        },
+      ],
+      exercises: [
+        { question: "Rewrite: 'I love her smile.' -> '___ is her smile.'", answer: "What I love" },
+        { question: "Rewrite: 'The manager fixed the issue.' -> 'It ___ who fixed the issue.'", answer: "was the manager" },
+      ],
+    },
+  },
+  {
+    title: "Advanced Idiomatic Expressions",
+    description: "Sound like a native speaker using advanced C2 idioms.",
+    cefrLevel: "C2",
+    category: "vocabulary",
+    orderIndex: 11,
+    content: {
+      sections: [
+        {
+          type: "explanation",
+          text: "At C2 level, idioms often rely on metaphors that don't translate literally. Using them correctly shows mastery of English nuance.",
+        },
+        {
+          type: "examples",
+          items: [
+            { en: "To play devil's advocate (to argue the opposite side for the sake of debate).", id: "Bermain sebagai pengacara iblis (berargumen di pihak lawan demi perdebatan)." },
+            { en: "To sit on the fence (to remain neutral).", id: "Duduk di atas pagar (bersikap netral)." },
+            { en: "To cut to the chase (to get to the point).", id: "Langsung ke intinya." },
+          ],
+        },
+      ],
+      exercises: [
+        { question: "Stop wasting time and ___ (cut to the chase).", answer: "cut to the chase" },
+        { question: "He never takes a side; he always ___.", answer: "sits on the fence" },
+      ],
+    },
+  },
+  {
+    title: "S-P-O-K: Basic Sentence Structure",
+    description: "Learn how to build correct English sentences using Subject, Predicate, Object, and Adverb.",
+    cefrLevel: "A1",
+    category: "grammar",
+    orderIndex: -2,
+    content: {
+      sections: [
+        {
+          type: "explanation",
+          text: "In English, the basic sentence structure is **S-P-O-K** (Subjek, Predikat, Objek, Keterangan) or **S-V-O-A** (Subject, Verb, Object, Adverb).\n\n- **Subject**: Who is doing the action (I, You, She, He, John).\n- **Predicate/Verb**: What the action is (eat, study, go).\n- **Object**: Who/what receives the action (an apple, English).\n- **Adverb**: Where, when, or how the action happens (in the kitchen, every day).",
+        },
+        {
+          type: "examples",
+          items: [
+            { en: "I (S) study (P) English (O) every day (K).", id: "Saya belajar bahasa Inggris setiap hari." },
+            { en: "She (S) eats (P) an apple (O) in the morning (K).", id: "Dia makan sebuah apel di pagi hari." },
+            { en: "They (S) play (P) football (O) at the park (K).", id: "Mereka bermain sepak bola di taman." },
+          ],
+        },
+        {
+          type: "tip",
+          text: "Always start with the Subject and the Verb! In English, you cannot usually drop the Subject (unlike in some Indonesian informal phrases).",
+        },
+      ],
+      exercises: [
+        { question: "Identify the subject: 'My brother plays guitar.'", answer: "My brother" },
+        { question: "Fill the verb: 'We ___ (study) English.'", answer: "study" },
+        { question: "Rearrange to S-P-O-K: 'pizza / I / at night / eat'", answer: "I eat pizza at night" },
+      ],
+    },
+  },
+  {
+    title: "Understanding Verb Forms: V1, V2, V3, V-ing",
+    description: "Learn the difference between Verb 1 (Present), Verb 2 (Past), Verb 3 (Past Participle), and Verb-ing (Continuous/Gerund).",
+    cefrLevel: "A1",
+    category: "grammar",
+    orderIndex: -1,
+    content: {
+      sections: [
+        {
+          type: "explanation",
+          text: "Unlike Indonesian, English verbs change depending on **when** the action happens and **how** it is used in a sentence. Here are the 4 main forms of English verbs:\n\n### 1. Verb 1 (Base/Present Form)\nUsed for:\n- **Habits/Routines** (Present Simple): *I play tennis.* / *She plays tennis (with s/es).* \n- **After Modal Verbs** (*can, could, should, must, will, would*): *You must study.* \n- **Commands/Imperatives**: *Go home!* / *Listen to me!*\n- **To-Infinitives** (after verbs like *want, need, decide*): *I want to learn English.*\n\n### 2. Verb 2 (Past Simple Form)\nUsed for:\n- **Completed Actions in the Past** (Past Simple): *I went to Jakarta yesterday.* / *They played soccer last week.*\n\n### 3. Verb 3 (Past Participle Form)\nUsed for:\n- **Completed Actions** (Present/Past Perfect): *I have eaten lunch.* / *She had left before I arrived. (Requires 'have', 'has', or 'had' before the verb).*\n- **Passive Voice** (di-/ter- in Indonesian): *The cake was eaten by John.* / *English is spoken here.*\n\n### 4. Verb-ing (Present Participle / Gerund)\nUsed for:\n- **Ongoing Actions** (Continuous/Progressive): *I am writing an email now.* / *They were sleeping when it rained. (Requires 'be' like 'am/is/are/was/were').*\n- **Gerunds** (Verbs acting as nouns): *Swimming is fun.* / *I enjoy reading.*",
+        },
+        {
+          type: "examples",
+          items: [
+            { en: "I write (V1) a letter every week. (Habit)", id: "Saya menulis sebuah surat setiap minggu. (Kebiasaan)" },
+            { en: "I wrote (V2) a letter yesterday. (Past)", id: "Saya menulis sebuah surat kemarin. (Masa Lalu)" },
+            { en: "I have written (V3) a letter. (Perfect/Completed)", id: "Saya sudah menulis sebuah surat. (Sudah Selesai)" },
+            { en: "I am writing (V-ing) a letter right now. (Continuous/Ongoing)", id: "Saya sedang menulis sebuah surat sekarang. (Sedang Berlangsung)" }
+          ],
+        },
+        {
+          type: "tip",
+          text: "Regular verbs simply add '-ed' for Verb 2 and Verb 3 (walk -> walked -> walked). Irregular verbs change completely (go -> went -> gone, write -> wrote -> written) and need to be memorized!",
+        },
+      ],
+      exercises: [
+        { question: "What is the V2 of 'go'?", answer: "went" },
+        { question: "I ___ (play - V1) football every week.", answer: "play" },
+        { question: "She ___ (eat - V2) pizza yesterday.", answer: "ate" },
+        { question: "They are ___ (study - V-ing) English now.", answer: "studying" },
+        { question: "He has ___ (write - V3) a book.", answer: "written" }
+      ],
+    },
+  }
 ];
 
 async function main() {
@@ -248,6 +427,9 @@ async function main() {
 
   const client = postgres(url, { ssl: "require", max: 1 });
   const db = drizzle(client);
+
+  console.log("🧹 Clearing old lessons...");
+  await db.delete(lessons);
 
   console.log(`🌱 Seeding ${LESSONS.length} lessons...\n`);
 

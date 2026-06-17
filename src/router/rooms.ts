@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import { rooms, roomMembers, users } from "../db/schema";
+import { sql } from "drizzle-orm";
 
 export const roomsRouter = router({
   getActive: protectedProcedure.query(async () => {
@@ -77,6 +78,17 @@ export const roomsRouter = router({
       await db
         .delete(roomMembers)
         .where(and(eq(roomMembers.roomId, input.roomId), eq(roomMembers.userId, user.id)));
+
+      const remainingMembers = await db.query.roomMembers.findMany({
+        where: eq(roomMembers.roomId, input.roomId),
+      });
+
+      if (remainingMembers.length === 0) {
+        await db
+          .update(rooms)
+          .set({ isActive: false })
+          .where(eq(rooms.id, input.roomId));
+      }
 
       return { success: true };
     }),
