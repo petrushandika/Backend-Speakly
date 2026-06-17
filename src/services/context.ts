@@ -36,21 +36,21 @@ export interface LearningContext {
 const CACHE_KEY = (userId: string) => `learning_ctx:${userId}`;
 const TTL = 5 * 60; // 5 minutes
 
-export async function getLearningContext(userId: string): Promise<LearningContext> {
+export async function get(userId: string): Promise<LearningContext> {
   // Try cache first
   const cached = await cacheGet<LearningContext>(CACHE_KEY(userId));
   if (cached) return cached;
 
-  const ctx = await computeLearningContext(userId);
+  const ctx = await compute(userId);
   await cacheSet(CACHE_KEY(userId), ctx, TTL);
   return ctx;
 }
 
-export async function invalidateLearningContext(userId: string): Promise<void> {
+export async function invalidate(userId: string): Promise<void> {
   await cacheDel(CACHE_KEY(userId));
 }
 
-async function computeLearningContext(userId: string): Promise<LearningContext> {
+async function compute(userId: string): Promise<LearningContext> {
   const twoWeeksAgo = new Date(Date.now() - 14 * 86_400_000);
   const oneWeekAgo  = new Date(Date.now() -  7 * 86_400_000);
 

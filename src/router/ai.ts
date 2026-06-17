@@ -5,7 +5,7 @@ import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import { users, userErrors, lessons, userProgress } from "../db/schema";
 import { complete } from "../services/groq";
-import { getLearningContext, invalidateLearningContext } from "../services/learning-context";
+import { get, invalidate } from "../services/context";
 import { scorePronunciation } from "../lib/pronunciation";
 import {
   buildFeedbackPrompt,
@@ -76,7 +76,7 @@ export const aiRouter = router({
               correctedText: e.correction,
             })),
           );
-          await invalidateLearningContext(user.id);
+          await invalidate(user.id);
         }
       }
 
@@ -100,8 +100,8 @@ export const aiRouter = router({
       let topErrors: string[] = [];
       if (user) {
         try {
-          const ctx2 = await getLearningContext(user.id);
-          topErrors = ctx2.topErrors;
+          const context = await get(user.id);
+          topErrors = context.topErrors;
         } catch {}
       }
 
@@ -171,7 +171,7 @@ export const aiRouter = router({
     });
     if (!user) return [];
 
-    const learningCtx = await getLearningContext(user.id);
+    const learningCtx = await get(user.id);
 
     // Determine target lesson categories from error patterns
     const targetCategories = new Set<string>();
@@ -229,7 +229,7 @@ export const aiRouter = router({
       columns: { id: true },
     });
     if (!user) throw new TRPCError({ code: "NOT_FOUND" });
-    return getLearningContext(user.id);
+    return get(user.id);
   }),
 
   // ── Auto-classify a flashcard word via Groq ───────────────────────────────
