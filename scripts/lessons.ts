@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 const LESSONS = [
   {
     title: "Present Simple vs Present Continuous",
-    description: "Learn when to use present simple for habits and present continuous for ongoing actions.",
+    description: "Belajar kapan menggunakan present simple untuk kebiasaan dan present continuous untuk tindakan yang sedang berlangsung.",
     cefrLevel: "A2",
     category: "grammar",
     orderIndex: 1,
@@ -17,7 +17,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "Use **Present Simple** for routines, facts, and habits. Use **Present Continuous** for actions happening right now or temporary situations.",
+          text: "Gunakan **Present Simple** untuk rutinitas, fakta, dan kebiasaan sehari-hari. Gunakan **Present Continuous** untuk tindakan yang sedang berlangsung sekarang atau situasi sementara.",
         },
         {
           type: "examples",
@@ -28,7 +28,7 @@ const LESSONS = [
         },
         {
           type: "tip",
-          text: "State verbs (know, love, believe, want) are rarely used in continuous form.",
+          text: "Kata kerja statis (*state verbs*) seperti *know* (tahu), *love* (cinta), *believe* (percaya), *want* (ingin) jarang digunakan dalam bentuk continuous (-ing).",
         },
       ],
       exercises: [
@@ -40,7 +40,7 @@ const LESSONS = [
   },
   {
     title: "Past Simple & Past Continuous",
-    description: "Master storytelling in English using past tenses.",
+    description: "Kuasai cara menceritakan kejadian di masa lampau menggunakan past tenses.",
     cefrLevel: "A2",
     category: "grammar",
     orderIndex: 2,
@@ -48,7 +48,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "**Past Simple** for completed actions. **Past Continuous** for actions that were in progress when another event happened.",
+          text: "Gunakan **Past Simple** untuk tindakan yang telah selesai di masa lampau. Gunakan **Past Continuous** untuk tindakan yang sedang berlangsung di masa lampau ketika peristiwa lain terjadi.",
         },
         {
           type: "examples",
@@ -66,7 +66,7 @@ const LESSONS = [
   },
   {
     title: "Modal Verbs: Can, Could, Should, Must",
-    description: "Express ability, permission, advice, and obligation in English.",
+    description: "Ungkapkan kemampuan, izin, saran, dan kewajiban dalam bahasa Inggris.",
     cefrLevel: "B1",
     category: "grammar",
     orderIndex: 3,
@@ -74,7 +74,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "Modals add meaning to the main verb: **can/could** (ability/possibility), **should** (advice), **must** (strong obligation), **may/might** (possibility).",
+          text: "Kata kerja modal (*modals*) menambahkan makna pada kata kerja utama:\n- **can / could**: kemampuan atau izin (*bisa / dapat*)\n- **should**: saran atau nasihat (*seharusnya*)\n- **must**: kewajiban atau keharusan kuat (*harus*)\n- **may / might**: kemungkinan (*mungkin*)",
         },
         {
           type: "examples",
@@ -94,7 +94,7 @@ const LESSONS = [
   },
   {
     title: "Conditionals: Zero, First & Second",
-    description: "Talk about real and hypothetical situations confidently.",
+    description: "Bicarakan tentang situasi nyata dan hipotetis dengan percaya diri.",
     cefrLevel: "B1",
     category: "grammar",
     orderIndex: 4,
@@ -102,7 +102,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "**Zero**: general truths (If + present, present). **First**: real/likely future (If + present, will). **Second**: hypothetical (If + past, would).",
+          text: "Kalimat pengandaian (*conditionals*) digunakan untuk membicarakan situasi nyata atau imajiner:\n\n- **Zero Conditional** (Kebenaran Umum): Menggunakan rumus *If + present, present*. Contoh: Jika air dipanaskan, ia mendidih.\n- **First Conditional** (Kemungkinan Masa Depan): Menggunakan rumus *If + present, will + V1*. Contoh: Jika besok hujan, saya akan tinggal di rumah.\n- **Second Conditional** (Khayalan/Imajinasi): Menggunakan rumus *If + past, would + V1*. Contoh: Jika saya punya uang banyak, saya akan keliling dunia.",
         },
         {
           type: "examples",
@@ -152,7 +152,7 @@ const LESSONS = [
   },
   {
     title: "Phrasal Verbs in Daily Conversation",
-    description: "Master 20 essential phrasal verbs used by native speakers.",
+    description: "Kuasai 20 phrasal verbs penting yang sering digunakan oleh penutur asli.",
     cefrLevel: "B1",
     category: "vocabulary",
     orderIndex: 6,
@@ -160,7 +160,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "Phrasal verbs are verb + preposition/adverb combinations with meanings different from the literal parts.",
+          text: "Phrasal verbs adalah gabungan antara kata kerja (*verb*) dengan kata depan (*preposition*) atau kata keterangan (*adverb*) yang menghasilkan arti baru, berbeda dari arti kata aslinya.",
         },
         {
           type: "examples",
@@ -183,7 +183,7 @@ const LESSONS = [
   },
   {
     title: "Articles: A, An, The",
-    description: "One of the trickiest parts of English — master articles once and for all.",
+    description: "Salah satu bagian tersulit dalam bahasa Inggris — kuasai penggunaan artikel sekali dan untuk selamanya.",
     cefrLevel: "A1",
     category: "grammar",
     orderIndex: 0,
@@ -191,7 +191,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "Use **a/an** for first mention or non-specific nouns. Use **the** for specific nouns both speaker and listener know. No article for general plural/uncountable nouns.",
+          text: "Gunakan **a/an** untuk menyebutkan kata benda tunggal yang belum spesifik atau baru pertama kali disebut. Gunakan **the** untuk kata benda yang sudah spesifik dan diketahui oleh pembicara maupun pendengar. Jangan gunakan artikel untuk kata benda jamak atau tidak dapat dihitung (*uncountable*) yang bersifat umum.",
         },
         {
           type: "examples",
@@ -211,7 +211,7 @@ const LESSONS = [
   },
   {
     title: "Passive Voice",
-    description: "Express actions when the doer is unknown or unimportant.",
+    description: "Ungkapkan tindakan ketika pelaku tidak diketahui atau tidak penting.",
     cefrLevel: "B1",
     category: "grammar",
     orderIndex: 7,
@@ -219,7 +219,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "Passive voice: **be + past participle**. Used when the action is more important than who does it, or when the doer is unknown.",
+          text: "Kalimat pasif (*Passive Voice*) menggunakan rumus: **to be + Verb 3**. Digunakan ketika tindakan itu sendiri lebih penting daripada pelaku yang melakukannya, atau ketika pelakunya tidak diketahui.",
         },
         {
           type: "examples",
@@ -351,7 +351,7 @@ const LESSONS = [
   },
   {
     title: "S-P-O-K: Basic Sentence Structure",
-    description: "Learn how to build correct English sentences using Subject, Predicate, Object, and Adverb.",
+    description: "Pelajari cara membangun kalimat bahasa Inggris yang benar menggunakan Subjek, Predikat, Objek, dan Keterangan.",
     cefrLevel: "A1",
     category: "grammar",
     orderIndex: -2,
@@ -359,7 +359,7 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "In English, the basic sentence structure is **S-P-O-K** (Subjek, Predikat, Objek, Keterangan) or **S-V-O-A** (Subject, Verb, Object, Adverb).\n\n- **Subject**: Who is doing the action (I, You, She, He, John).\n- **Predicate/Verb**: What the action is (eat, study, go).\n- **Object**: Who/what receives the action (an apple, English).\n- **Adverb**: Where, when, or how the action happens (in the kitchen, every day).",
+          text: "Dalam bahasa Inggris, struktur dasar kalimat mengikuti pola **S-P-O-K** (Subjek, Predikat, Objek, Keterangan) atau **S-V-O-A** (Subject, Verb, Object, Adverb).\n\n- **Subject (Subjek)**: Siapa pelaku tindakan (I, You, She, He, John).\n- **Predicate/Verb (Predikat/Kata Kerja)**: Apa tindakannya (eat, study, go).\n- **Object (Objek)**: Siapa/apa penerima tindakan (an apple, English).\n- **Adverb (Keterangan)**: Di mana, kapan, atau bagaimana tindakan terjadi (in the kitchen, every day).",
         },
         {
           type: "examples",
@@ -371,7 +371,7 @@ const LESSONS = [
         },
         {
           type: "tip",
-          text: "Always start with the Subject and the Verb! In English, you cannot usually drop the Subject (unlike in some Indonesian informal phrases).",
+          text: "Selalu mulai kalimat dengan Subjek dan Predikat! Dalam bahasa Inggris, Subjek biasanya tidak boleh dihilangkan (berbeda dengan beberapa ungkapan informal dalam bahasa Indonesia).",
         },
       ],
       exercises: [
@@ -383,7 +383,7 @@ const LESSONS = [
   },
   {
     title: "Understanding Verb Forms: V1, V2, V3, V-ing",
-    description: "Learn the difference between Verb 1 (Present), Verb 2 (Past), Verb 3 (Past Participle), and Verb-ing (Continuous/Gerund).",
+    description: "Pelajari perbedaan antara Verb 1 (Present), Verb 2 (Past), Verb 3 (Past Participle), dan Verb-ing (Continuous/Gerund).",
     cefrLevel: "A1",
     category: "grammar",
     orderIndex: -1,
