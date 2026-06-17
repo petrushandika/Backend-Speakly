@@ -46,12 +46,14 @@ export interface PronunciationResult {
   mismatchedWords: Array<{ expected: string; said: string | null }>;
 }
 
+const MAX_WORDS = 600;
+
 export function scorePronunciation(
   expected: string,
   transcript: string,
 ): PronunciationResult {
-  const ref = normalize(expected);
-  const hyp = normalize(transcript);
+  const ref = normalize(expected).slice(0, MAX_WORDS);
+  const hyp = normalize(transcript).slice(0, MAX_WORDS);
 
   if (ref.length === 0) {
     return {

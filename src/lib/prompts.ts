@@ -392,70 +392,91 @@ Rules: use real-world sentences, vary question types, include at least 1 easy qu
 
 // ─── Reading Aloud Text Generator ────────────────────────────────────────────
 
+const READING_GENRES = [
+  { id: "narrative",    label: "Short Story",        instruction: "Write a short fictional story with a character, a small conflict, and a resolution. Use vivid descriptions and natural dialogue if it fits." },
+  { id: "article",      label: "Magazine Article",   instruction: "Write like a journalist explaining an interesting real-world topic. Use a compelling hook, specific examples, and end with a thought-provoking insight." },
+  { id: "opinion",      label: "Opinion Piece",      instruction: "Write a first-person opinion piece arguing a clear viewpoint. Use persuasive language, acknowledge counterpoints briefly, and end with a strong conclusion." },
+  { id: "travel_log",   label: "Travel Journal",     instruction: "Write as a traveller sharing a personal experience at a real or imagined location. Use sensory details, emotions, and cultural observations." },
+  { id: "interview",    label: "Interview Excerpt",  instruction: "Write a Q&A-style interview between a journalist and an expert or interesting person. Use natural spoken language, contractions, and personality." },
+  { id: "how_to",       label: "How-To Guide",       instruction: "Write a practical, friendly how-to explaining a process or skill. Use imperative sentences naturally mixed with explanatory prose. No numbered list — flowing paragraphs only." },
+  { id: "review",       label: "Product/Book Review",instruction: "Write an engaging review of a product, book, film, or restaurant. Give a genuine recommendation with specific reasons and a personal anecdote." },
+  { id: "letter",       label: "Personal Letter",    instruction: "Write a personal letter from one person to another — could be a friend, mentor, or family member. Use warm, natural conversational English." },
+  { id: "news",         label: "News Report",        instruction: "Write a concise news-style report on an imagined recent event. Use journalistic style: 5Ws in the lead, quotes, and background context." },
+  { id: "blog",         label: "Blog Post",          instruction: "Write a personal blog post where the author shares an experience or lesson learned. Use a conversational tone, 'you' address, and real-sounding anecdote." },
+];
+
 export function buildReadingTextPrompt(
   theme: string,
   paragraphs: number,
   cefrLevel: string,
   domain: string,
+  genreId?: string,
 ): string {
   const wordTargets: Record<string, string> = {
     "1": "150–200",
-    "2": "300–400",
-    "3": "500–620",
+    "2": "300–420",
+    "3": "500–650",
   };
-  const words = wordTargets[String(paragraphs)] ?? "300–400";
+  const words = wordTargets[String(paragraphs)] ?? "300–420";
+
+  // Pick genre — either passed in or random
+  const genre = READING_GENRES.find((g) => g.id === genreId)
+    ?? READING_GENRES[Math.floor(Math.random() * READING_GENRES.length)];
 
   const levelGuidance: Record<string, string> = {
-    A1: "Use only the most common 500 English words. Simple present/past tense only. Short sentences (max 10 words each). No complex grammar.",
-    A2: "Use common vocabulary. Simple past and present perfect allowed. Sentences max 15 words each. Avoid idioms.",
-    B1: "Use intermediate vocabulary. Varied tenses, some compound sentences. Introduce 2–3 useful collocations naturally.",
-    B2: "Use upper-intermediate vocabulary. Complex sentences, passive voice, relative clauses. Include idiomatic phrases.",
-    C1: "Use advanced vocabulary. Nuanced syntax, subordinate clauses. Include sophisticated collocations and formal register.",
-    C2: "Use near-native vocabulary range. Complex rhetorical structures, idiomatic expressions. No simplification.",
+    A1: "Use only the most common 500 English words. Simple present/past tense only. Short sentences (max 10 words). No complex grammar.",
+    A2: "Use common vocabulary. Simple past and present perfect allowed. Sentences max 15 words. Avoid idioms.",
+    B1: "Use intermediate vocabulary. Varied tenses, compound sentences. Include 2–3 collocations naturally.",
+    B2: "Use upper-intermediate vocabulary. Complex sentences, passive voice, relative clauses, idiomatic phrases.",
+    C1: "Use advanced vocabulary. Nuanced syntax, subordinate clauses, sophisticated collocations, formal/informal register contrast.",
+    C2: "Use near-native vocabulary. Complex rhetorical structures, rich idioms, subtle register. No simplification.",
   };
 
-  return `You are a content writer for a language learning app. Generate a reading-aloud practice passage for an English learner at ${cefrLevel} level.
+  return `You are a professional content writer creating reading-aloud practice for an English learner.
 
+Student level: ${cefrLevel}
 Theme: ${theme}
-Domain context: ${domain}
-Target length: ${words} words total across ${paragraphs} paragraph${paragraphs > 1 ? "s" : ""}
+Domain: ${domain}
+Genre: ${genre.label}
+Length: ${words} words across ${paragraphs} paragraph${paragraphs > 1 ? "s" : ""}
 Language guidance: ${levelGuidance[cefrLevel] ?? levelGuidance["B1"]}
 
-CRITICAL STYLE RULE — read this carefully:
-Write like a MAGAZINE ARTICLE, BLOG POST, or SHORT STORY. The passage must read as natural, connected English prose — not like an ESL textbook.
+Genre instruction: ${genre.instruction}
 
-STRICTLY FORBIDDEN patterns:
-- DO NOT write short, choppy sentences like: "They make a plan. The plan is important. It helps them work."
-- DO NOT repeat subjects in every sentence: "The company sells. The company buys. The company grows."
-- DO NOT write sentences under 10 words repeatedly.
-- DO NOT write a list of facts — write a flowing narrative or article.
+STYLE RULES (non-negotiable):
+- Write NATURAL English prose that sounds like a real native-speaker text — NOT an ESL exercise.
+- Vary sentence length: short punchy sentences AND longer flowing ones, mixed organically.
+- Use connectors and transitions: however, although, while, as a result, not only… but also, despite, given that.
+- Each paragraph must flow logically from the previous one.
+- Make the content genuinely surprising or engaging — avoid generic filler.
+- FORBIDDEN: choppy sentence strings ("The man works. He is good. Work is fun."), repeated subjects every sentence, bullet points, headers.
+- REQUIRED: at least one complex sentence per paragraph; at least one vivid concrete detail or example.
 
-REQUIRED patterns:
-- Use varied sentence length (mix short and long naturally)
-- Use connectors: however, although, while, because, which, who, that, when, as a result
-- Each paragraph should flow from one sentence to the next with logical continuity
-- Write as if a real person is telling a story or explaining something they're passionate about
-
-CRITICAL LENGTH: Each paragraph must be at least ${Math.floor(parseInt(words.split("–")[0]) / paragraphs)} words — a full, rich block of text.
+PRONUNCIATION RICHNESS — include these in the text naturally:
+- At least 2 words with tricky pronunciation for Indonesian speakers (e.g. words with /v/, /θ/, /ð/, /æ/, or consonant clusters like "strengths", "twelfths")
+- At least 1 word that is commonly mispronounced (e.g. "comfortable", "vegetable", "particularly", "colonel", "February", "Wednesday")
+- A mix of word stress patterns across the passage
 
 Return ONLY valid JSON (no markdown, no code fences):
 {
-  "title": "Short descriptive title (max 6 words)",
+  "title": "Engaging title max 6 words",
+  "genre": "${genre.id}",
   "theme": "${theme}",
   "cefrLevel": "${cefrLevel}",
-  "paragraphs": ["Paragraph 1 — natural flowing prose, 3-5 connected sentences, reads like a real article.", "Paragraph 2 — continues with new ideas, connected to paragraph 1. Same quality."],
+  "paragraphs": ["Full paragraph 1 — rich natural prose.", "Full paragraph 2 — continues the piece."],
   "wordCount": 0,
   "keyVocabulary": [
-    {"word": "example", "definition": "brief definition in max 8 words", "indonesian": "arti kata dalam bahasa Indonesia", "ipa": "/ɪɡˈzɑːmpəl/"}
+    {"word": "example", "definition": "brief meaning in max 8 words", "indonesian": "terjemahan bahasa Indonesia", "ipa": "/ɪɡˈzɑːmpəl/"}
   ],
-  "readingTips": "One specific tip for reading this passage naturally and with good rhythm"
+  "readingTips": "One specific tip for reading this passage aloud — focus on rhythm, stress, or a tricky word",
+  "pronunciationChallenges": ["word1", "word2", "word3"]
 }
 
 Rules:
-- Include 3–5 key vocabulary words that actually appear in the passage
-- Make the content genuinely interesting, not generic
-- wordCount = actual total word count of all paragraphs combined
-- Each paragraph must be coherent and logically connected to the next`;
+- 4–6 key vocabulary items that appear in the passage (prioritize the pronunciation-tricky ones)
+- pronunciationChallenges = 3–5 words from the passage that Indonesian learners typically struggle with
+- wordCount = actual word count of all paragraphs combined
+- Make it genuinely interesting — the student will read it aloud, so engaging content keeps them motivated`;
 }
 
 // ─── Daily Speaking Challenge Topic Generator ────────────────────────────────

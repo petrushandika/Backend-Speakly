@@ -345,6 +345,7 @@ Return:
       z.object({
         theme:      z.enum(["business", "technology", "travel", "daily_life", "science", "culture"]),
         paragraphs: z.number().int().min(1).max(3).default(2),
+        genre:      z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -358,26 +359,96 @@ Return:
         input.paragraphs,
         user?.cefrLevel ?? "B1",
         user?.domain ?? "general",
+        input.genre,
       );
 
       const raw = await complete([{ role: "user", content: prompt }], {
         model: "primary",
-        temperature: 0.6,
-        maxTokens: 1600,
+        temperature: 0.85,
+        maxTokens: 2000,
       });
 
       try {
         return JSON.parse(raw) as {
           title: string;
+          genre?: string;
           theme: string;
           cefrLevel: string;
           paragraphs: string[];
           wordCount: number;
           keyVocabulary: Array<{ word: string; definition: string; indonesian: string; ipa: string }>;
           readingTips: string;
+          pronunciationChallenges?: string[];
         };
       } catch {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned invalid response" });
+      }
+    }),
+
+  // ── Deep AI analysis of reading-aloud attempt ─────────────────────────────
+  analyzeReadingAloud: protectedProcedure
+    .input(
+      z.object({
+        expected:   z.string().min(1).max(8000),
+        transcript: z.string(),
+        cefrLevel:  z.string().optional(),
+        missedWords: z.array(z.string()).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { cefrLevel: true },
+      });
+      const level = input.cefrLevel ?? user?.cefrLevel ?? "B1";
+
+      const prompt = `You are an expert English pronunciation and fluency coach analysing a student's reading-aloud attempt.
+
+Student CEFR level: ${level}
+Student's first language: Indonesian (common issues: /v/ vs /f/, /θ/ vs /t/ or /d/, silent letters, stress patterns, final consonant clusters)
+
+ORIGINAL TEXT:
+"""
+${sanitizeInput(input.expected)}
+"""
+
+WHAT THE STUDENT SAID (transcribed by speech-to-text):
+"""
+${sanitizeInput(input.transcript || "(nothing detected)")}
+"""
+
+${input.missedWords?.length ? `Words flagged as missed or wrong: ${input.missedWords.join(", ")}` : ""}
+
+Analyse the differences and return ONLY valid JSON:
+{
+  "overallFeedback": "2–3 sentence overall summary — encouraging but honest",
+  "spellingErrors": [
+    {"said": "what student said", "expected": "correct word", "type": "homophone|omission|substitution|mispronunciation", "tip": "short pronunciation tip"}
+  ],
+  "pronunciationTips": [
+    {"word": "word from text", "ipa": "/fəˈnetɪk/", "commonMistake": "Indonesian speakers often say X", "tip": "how to say it correctly"}
+  ],
+  "fluencyObservations": "1–2 sentences on rhythm, pacing, or flow",
+  "strongPoints": ["specific thing done well — must be genuine"],
+  "topPriority": "The single most important thing to fix next session"
+}
+
+Rules:
+- spellingErrors: compare what was transcribed vs original — flag substitutions (wrong word), omissions (skipped), homophones (their/there), and likely mispronunciations
+- pronunciationTips: focus on words that are tricky for Indonesian speakers specifically
+- Be specific, not generic — "practice /θ/ in 'the'" not "speak more clearly"
+- If transcript is empty or very short, still give helpful tips based on the text`;
+
+      const raw = await complete([{ role: "user", content: prompt }], {
+        model: "primary",
+        temperature: 0.3,
+        maxTokens: 800,
+      });
+
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
       }
     }),
 

@@ -35,6 +35,7 @@ export async function complete(
     model?: GroqModel;
     temperature?: number;
     maxTokens?: number;
+    _retries?: number;
   } = {},
 ): Promise<string> {
   const groq = getGroq();
@@ -50,13 +51,14 @@ export async function complete(
 
     return completion.choices[0]?.message?.content ?? "";
   } catch (err: unknown) {
-    // Fallback to smaller model on rate limit
+    const retries = opts._retries ?? 0;
     if (
       err instanceof Error &&
       err.message.includes("rate_limit") &&
-      opts.model !== "fallback"
+      opts.model !== "fallback" &&
+      retries < 2
     ) {
-      return complete(messages, { ...opts, model: "fallback" });
+      return complete(messages, { ...opts, model: "fallback", _retries: retries + 1 });
     }
     throw err;
   }
