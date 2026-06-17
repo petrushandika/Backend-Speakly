@@ -12,9 +12,10 @@ import { appRouter } from "./router/_app";
 import { createContext } from "./trpc";
 import { supabase } from "./lib/supabase";
 import { db } from "./db";
-import { users, userErrors } from "./db/schema";
+import { users } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
 import { buildMessages, sanitizeInput } from "./lib/prompts";
+import { getLearningContext } from "./services/learning-context";
 import { transcribe } from "./services/whisper";
 import { synthesize } from "./services/elevenlabs";
 
@@ -65,40 +66,43 @@ app.post("/ai/stream", async (c) => {
   }
   if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);
 
-  // 3. Get user profile via Drizzle
+  // 3. Get user profile
   const user = await db.query.users.findFirst({
     where: eq(users.authId, authData.user.id),
-    columns: {
-      id: true,
-      displayName: true,
-      cefrLevel: true,
-      goal: true,
-      domain: true,
-      accentPreference: true,
-    },
+    columns: { id: true },
   });
 
-  // 4. Get recent error patterns via Drizzle
-  const recentErrors = user
-    ? await db.query.userErrors.findMany({
-        where: eq(userErrors.userId, user.id),
-        orderBy: (e, { desc }) => desc(e.createdAt),
-        limit: 20,
-        columns: { errorCategory: true },
-      })
-    : [];
-
-  const topErrors = [...new Set(recentErrors.map((e) => e.errorCategory))].slice(0, 3);
-
-  // 5. Build messages for Groq
-  const userCtx = {
-    displayName:      user?.displayName      ?? "Student",
-    cefrLevel:        user?.cefrLevel        ?? "B1",
-    goal:             user?.goal             ?? "general",
-    domain:           user?.domain           ?? "general",
-    accentPreference: user?.accentPreference ?? "american",
-    topErrors,
-  };
+  // 4. Build rich learning context (Redis-cached, 5 min TTL)
+  let userCtx;
+  if (user) {
+    try {
+      const ctx = await getLearningContext(user.id);
+      userCtx = {
+        displayName:      ctx.displayName,
+        cefrLevel:        ctx.cefrLevel,
+        goal:             ctx.goal,
+        domain:           ctx.domain,
+        accentPreference: ctx.accentPreference,
+        topErrors:        ctx.topErrors,
+        nativeLanguage:   ctx.nativeLanguage,
+        errorTrend:       ctx.errorTrend,
+        weakCategories:   ctx.weakCategories,
+        strongCategories: ctx.strongCategories,
+        vocabularySize:   ctx.vocabularySize,
+        avgMastery:       ctx.avgMastery,
+      };
+    } catch {
+      userCtx = {
+        displayName: "Student", cefrLevel: "B1", goal: "general",
+        domain: "general", accentPreference: "american", topErrors: [],
+      };
+    }
+  } else {
+    userCtx = {
+      displayName: "Student", cefrLevel: "B1", goal: "general",
+      domain: "general", accentPreference: "american", topErrors: [],
+    };
+  }
 
   const messages = buildMessages(
     userCtx,

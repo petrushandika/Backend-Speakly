@@ -1,10 +1,17 @@
 export interface UserContext {
-  displayName: string;
-  cefrLevel: string;
-  goal: string;
-  domain: string;
+  displayName:      string;
+  cefrLevel:        string;
+  goal:             string;
+  domain:           string;
   accentPreference: string;
-  topErrors: string[];
+  topErrors:        string[];
+  // Optional rich context from LearningContext
+  nativeLanguage?:   string | null;
+  errorTrend?:       "improving" | "stable" | "needs_attention";
+  weakCategories?:   string[];
+  strongCategories?: string[];
+  vocabularySize?:   number;
+  avgMastery?:       number;
 }
 
 export interface ChatMessage {
@@ -32,30 +39,70 @@ export function wrapForLLM(sanitized: string): string {
 
 // ─── Aria Tutor — Main Conversation ─────────────────────────────────────────
 
+// Native language → common English interference patterns
+const NATIVE_LANGUAGE_NOTES: Record<string, string> = {
+  indonesian:  "Indonesian has no verb tenses, articles (a/the), or subject-verb agreement — these are their biggest struggles. Also: Indonesian word order can differ. Watch for missing auxiliary verbs ('She go' instead of 'She goes').",
+  javanese:    "Same as Indonesian, plus watch for politeness register confusion and passive voice overuse.",
+  malay:       "Very similar to Indonesian learners. Articles and tenses are the main weak points.",
+  mandarin:    "No articles, no tenses, no plural marking in Chinese. Watch for these patterns. Also: aspect vs tense confusion.",
+  cantonese:   "Similar to Mandarin. Also: prepositions and relative clauses are commonly confused.",
+  hindi:       "Articles missing, verb-final word order interference, prepositions often wrong.",
+  arabic:      "Definite article 'the' is often overused. Verb agreement with non-human plurals is tricky.",
+  spanish:     "Good grammar base but false cognates, ser/estar confusion, and subjunctive mood are weak points.",
+  portuguese:  "Similar to Spanish learners. Watch for preposition usage.",
+  french:      "Generally strong grammar awareness but article gender and phrasal verb usage is weak.",
+  japanese:    "Topic-comment structure interference. Articles missing. Over-polite phrasing.",
+  korean:      "Subject-object-verb word order interference. No articles. Honorifics confusion.",
+  thai:        "No conjugation in Thai — tense markers very important to emphasize.",
+  vietnamese:  "Tonal language — pronunciation of unstressed syllables is a challenge.",
+};
+
+function getNativeLanguageNote(lang: string | null | undefined): string {
+  if (!lang) return "";
+  const key = lang.toLowerCase().replace(/\s+/g, "");
+  return NATIVE_LANGUAGE_NOTES[key] ?? "";
+}
+
 export function buildSystemPrompt(user: UserContext): string {
-  return `You are Aria, Speakly's expert English language tutor.
-You have a PhD in Applied Linguistics and 15 years teaching English to non-native speakers across Southeast Asia, especially Indonesia.
-You are warm, encouraging, and precise. You never let errors pass uncorrected, but you always correct with kindness.
+  const nativeLangNote = getNativeLanguageNote(user.nativeLanguage);
+  const hasErrors      = user.topErrors && user.topErrors.length > 0;
+  const weakAreas      = user.weakCategories?.length ? user.weakCategories.join(", ") : null;
+  const improvingNote  = user.errorTrend === "improving"
+    ? "Their error rate has been decreasing — acknowledge their progress!"
+    : user.errorTrend === "needs_attention"
+      ? "Their error rate has increased recently — be especially attentive and supportive."
+      : "";
+
+  return `You are Aria, Speakly's AI English language tutor with a PhD in Applied Linguistics.
+You have 15 years teaching English to non-native speakers across Southeast Asia.
+You are warm, encouraging, and precise — you never let errors pass but always correct with kindness.
 
 ## Student Profile
 Name: ${user.displayName}
-Current CEFR level: ${user.cefrLevel}
-Learning goal: ${user.goal}
-Domain focus: ${user.domain}
-Target accent: ${user.accentPreference}
-${user.topErrors.length > 0 ? `Known error patterns: ${user.topErrors.slice(0, 3).join(", ")}` : ""}
+CEFR Level: ${user.cefrLevel}
+Learning Goal: ${user.goal}
+Domain Focus: ${user.domain}
+Target Accent: ${user.accentPreference}
+${user.nativeLanguage ? `Native Language: ${user.nativeLanguage}` : ""}
+${user.vocabularySize != null ? `Vocabulary bank: ${user.vocabularySize} words (avg mastery ${user.avgMastery ?? 0}%)` : ""}
+${hasErrors ? `Recurring grammar weaknesses: ${user.topErrors.slice(0, 4).join(", ")}` : ""}
+${weakAreas ? `Weak lesson areas: ${weakAreas}` : ""}
+${user.strongCategories?.length ? `Strong areas: ${user.strongCategories.join(", ")}` : ""}
+${improvingNote}
 
+${nativeLangNote ? `## Native Language Interference Notes\n${nativeLangNote}\n` : ""}
 ## Teaching Rules
 1. Always respond in English, even if the student writes in Indonesian
-2. Adjust vocabulary complexity to ${user.cefrLevel} level — not too hard, not too easy
+2. Adjust vocabulary complexity to exactly ${user.cefrLevel} level — not too hard, not too easy
 3. Keep replies to 2–4 sentences maximum — be concise and conversational
 4. Always end with a natural follow-up question to keep the conversation going
-5. When the student makes a grammar or vocabulary error, correct it naturally:
+5. When the student makes a grammar or vocabulary error, correct it naturally inline:
    Format: "[Your reply]. — Small note: we say '[correction]' not '[error]' because [brief explanation in one line]."
-6. Never translate Indonesian words — explain meaning with simple English and context
-7. Give specific praise only: "I noticed you used 'however' correctly — that's great B2 vocabulary!" not just "Good job!"
-8. Be warm but direct. Treat mistakes as a normal part of learning.
-9. Use examples from the student's domain (${user.domain}) when relevant.`;
+6. Proactively practice the student's known weak areas (${hasErrors ? user.topErrors[0] : "general grammar"}) when it fits naturally
+7. Give SPECIFIC praise only: "I noticed you used 'however' correctly — great B2 vocabulary!" NOT "Good job!"
+8. Be warm but direct. Treat mistakes as normal, expected, and fixable.
+9. Use domain-specific examples (${user.domain}) to make learning relevant.
+10. If the student repeats the same error type from their known weaknesses, give a more detailed mini-lesson.`;
 }
 
 export function buildMessages(

@@ -1,13 +1,33 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, desc, gte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
-import { users, userErrors } from "../db/schema";
+import { users, userErrors, lessons, userProgress } from "../db/schema";
 import { complete } from "../services/groq";
-import { buildFeedbackPrompt, buildGrammarPrompt, buildQuizPrompt } from "../lib/prompts";
+import { getLearningContext, invalidateLearningContext } from "../services/learning-context";
+import { scorePronunciation } from "../lib/pronunciation";
+import {
+  buildFeedbackPrompt,
+  buildGrammarPrompt,
+  buildQuizPrompt,
+  sanitizeInput,
+} from "../lib/prompts";
+
+// ── Error category → lesson category mapping ─────────────────────────────────
+const ERROR_TO_LESSON: Record<string, string[]> = {
+  tense:         ["grammar"],
+  article:       ["grammar"],
+  preposition:   ["grammar"],
+  subject_verb:  ["grammar"],
+  vocabulary:    ["vocabulary"],
+  pronunciation: ["speaking"],
+  fluency:       ["speaking"],
+  listening:     ["listening"],
+};
 
 export const aiRouter = router({
+  // ── Analyze spoken transcript feedback ───────────────────────────────────
   analyzeFeedback: protectedProcedure
     .input(
       z.object({
@@ -40,7 +60,6 @@ export const aiRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned invalid response" });
       }
 
-      // Save detected grammar errors
       if (user) {
         const errors = (feedback.grammar_errors as Array<{
           error: string; correction: string; category: string;
@@ -55,12 +74,14 @@ export const aiRouter = router({
               correctedText: e.correction,
             })),
           );
+          await invalidateLearningContext(user.id);
         }
       }
 
       return feedback;
     }),
 
+  // ── Generate personalized quiz ────────────────────────────────────────────
   generateQuiz: protectedProcedure
     .input(
       z.object({
@@ -74,16 +95,13 @@ export const aiRouter = router({
         columns: { id: true, cefrLevel: true },
       });
 
-      const recentErrors = user
-        ? await db.query.userErrors.findMany({
-            where: eq(userErrors.userId, user.id),
-            orderBy: (e, { desc }) => desc(e.createdAt),
-            limit: 20,
-            columns: { errorCategory: true },
-          })
-        : [];
-
-      const topErrors = [...new Set(recentErrors.map((e) => e.errorCategory))].slice(0, 3);
+      let topErrors: string[] = [];
+      if (user) {
+        try {
+          const ctx2 = await getLearningContext(user.id);
+          topErrors = ctx2.topErrors;
+        } catch {}
+      }
 
       const prompt = buildQuizPrompt(
         input.topic,
@@ -104,6 +122,7 @@ export const aiRouter = router({
       }
     }),
 
+  // ── Explain a grammar point (personalized) ────────────────────────────────
   explainGrammar: protectedProcedure
     .input(z.object({ grammarPoint: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
@@ -129,4 +148,177 @@ export const aiRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned invalid response" });
       }
     }),
+
+  // ── Score pronunciation via WER ────────────────────────────────────────────
+  scorePronunciation: protectedProcedure
+    .input(
+      z.object({
+        expected:   z.string().min(1).max(500),
+        transcript: z.string(),
+      }),
+    )
+    .query(async ({ input }) => {
+      return scorePronunciation(input.expected, input.transcript);
+    }),
+
+  // ── Personalized lesson recommendations ───────────────────────────────────
+  getRecommendations: protectedProcedure.query(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true, cefrLevel: true },
+    });
+    if (!user) return [];
+
+    const learningCtx = await getLearningContext(user.id);
+
+    // Determine target lesson categories from error patterns
+    const targetCategories = new Set<string>();
+    for (const errorCat of learningCtx.topErrors) {
+      const lessonCats = ERROR_TO_LESSON[errorCat] ?? ["grammar"];
+      lessonCats.forEach((c) => targetCategories.add(c));
+    }
+    for (const weakCat of learningCtx.weakCategories) {
+      targetCategories.add(weakCat);
+    }
+    // Always include at least grammar if no data
+    if (targetCategories.size === 0) targetCategories.add("grammar");
+
+    // Get all completed lesson IDs
+    const completedProgress = await db.query.userProgress.findMany({
+      where: (p, { and }) => and(
+        eq(p.userId, user.id),
+        eq(p.status, "completed"),
+      ),
+      columns: { lessonId: true },
+    });
+    const completedIds = new Set(completedProgress.map((p) => p.lessonId));
+
+    // Find lessons matching target categories, same CEFR level, not completed
+    const allLessons = await db.query.lessons.findMany({
+      where: eq(lessons.cefrLevel, learningCtx.cefrLevel),
+      columns: { id: true, title: true, description: true, category: true, cefrLevel: true },
+      limit: 50,
+    });
+
+    const recommended = allLessons
+      .filter((l) => !completedIds.has(l.id) && targetCategories.has(l.category))
+      .slice(0, 4);
+
+    // If fewer than 4, fill with any uncompleted lessons at this CEFR level
+    if (recommended.length < 4) {
+      const extra = allLessons
+        .filter((l) => !completedIds.has(l.id) && !recommended.find((r) => r.id === l.id))
+        .slice(0, 4 - recommended.length);
+      recommended.push(...extra);
+    }
+
+    return recommended.map((l) => ({
+      ...l,
+      reason: targetCategories.has(l.category)
+        ? `Your ${learningCtx.topErrors[0] ?? l.category} skills need practice`
+        : `Continue your ${learningCtx.cefrLevel} journey`,
+    }));
+  }),
+
+  // ── Get user's full learning context (for frontend analytics) ─────────────
+  getLearningContext: protectedProcedure.query(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true },
+    });
+    if (!user) throw new TRPCError({ code: "NOT_FOUND" });
+    return getLearningContext(user.id);
+  }),
+
+  // ── Auto-classify a flashcard word via Groq ───────────────────────────────
+  classifyWord: protectedProcedure
+    .input(z.object({ word: z.string().min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { cefrLevel: true },
+      });
+
+      const prompt = `Classify this English word/phrase and return ONLY valid JSON.
+Word: "${sanitizeInput(input.word)}"
+Student level: ${user?.cefrLevel ?? "B1"}
+
+Return:
+{
+  "cefrLevel": "A1|A2|B1|B2|C1|C2",
+  "partOfSpeech": "noun|verb|adjective|adverb|phrase|other",
+  "definition": "simple definition in max 12 words",
+  "exampleSentence": "natural example sentence",
+  "synonyms": ["word1", "word2"],
+  "difficulty": "easy|medium|hard"
+}`;
+
+      const raw = await complete([{ role: "user", content: prompt }], {
+        model: "fast",
+        temperature: 0.1,
+        maxTokens: 200,
+      });
+
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }),
+
+  // ── Grammar error analytics ────────────────────────────────────────────────
+  getErrorAnalytics: protectedProcedure.query(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true },
+    });
+    if (!user) return null;
+
+    const twoWeeksAgo = new Date(Date.now() - 14 * 86_400_000);
+
+    const allErrors = await db.query.userErrors.findMany({
+      where: (e, { and }) => and(
+        eq(e.userId, user.id),
+        gte(e.createdAt, twoWeeksAgo),
+      ),
+      orderBy: desc(userErrors.createdAt),
+      columns: { errorCategory: true, createdAt: true },
+    });
+
+    // Frequency by category
+    const frequency: Record<string, number> = {};
+    for (const e of allErrors) {
+      frequency[e.errorCategory] = (frequency[e.errorCategory] ?? 0) + 1;
+    }
+
+    // Daily counts for trend chart (last 14 days)
+    const dailyCounts: Record<string, number> = {};
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86_400_000);
+      dailyCounts[d.toISOString().slice(0, 10)] = 0;
+    }
+    for (const e of allErrors) {
+      const day = new Date(e.createdAt).toISOString().slice(0, 10);
+      if (day in dailyCounts) dailyCounts[day]++;
+    }
+
+    // Week-over-week trend
+    const oneWeekAgo = new Date(Date.now() - 7 * 86_400_000);
+    const errThisWeek = allErrors.filter((e) => new Date(e.createdAt) >= oneWeekAgo).length;
+    const errLastWeek = allErrors.filter((e) => new Date(e.createdAt) < oneWeekAgo).length;
+    const trend = errThisWeek < errLastWeek * 0.7
+      ? "improving"
+      : errThisWeek > errLastWeek * 1.3
+        ? "needs_attention"
+        : "stable";
+
+    return {
+      frequency,
+      dailyCounts,
+      trend,
+      totalThisWeek: errThisWeek,
+      totalLastWeek: errLastWeek,
+      topCategory:   Object.entries(frequency).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null,
+    };
+  }),
 });
