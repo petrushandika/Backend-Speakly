@@ -58,6 +58,7 @@ app.post("/ai/stream", async (c) => {
   let body: {
     message: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
+    voiceMode?: boolean;
   };
   try {
     body = await c.req.json();
@@ -108,6 +109,7 @@ app.post("/ai/stream", async (c) => {
     userCtx,
     body.history ?? [],
     sanitizeInput(body.message),
+    body.voiceMode,
   );
 
   // 6. Stream from Groq via SSE
@@ -122,7 +124,7 @@ app.post("/ai/stream", async (c) => {
       for await (const chunk of groqStream(messages, {
         model: "primary",
         temperature: 0.7,
-        maxTokens: 512,
+        maxTokens: body.voiceMode ? 160 : 512,
       })) {
         fullResponse += chunk;
         await s.write(`data: ${JSON.stringify({ type: "token", content: chunk })}\n\n`);

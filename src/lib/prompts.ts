@@ -109,8 +109,13 @@ export function buildMessages(
   user: UserContext,
   history: ChatMessage[],
   newMessage: string,
+  voiceMode?: boolean,
 ): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-  const systemPrompt = buildSystemPrompt(user);
+  let systemPrompt = buildSystemPrompt(user);
+  if (voiceMode) {
+    systemPrompt +=
+      "\n\nVOICE MODE: You are speaking aloud. Reply in 1–2 short spoken sentences only. No bullet points, no markdown, no lists. Natural conversational English only.";
+  }
   const sanitized = sanitizeInput(newMessage);
 
   return [
