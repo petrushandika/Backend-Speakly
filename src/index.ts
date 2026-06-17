@@ -16,10 +16,50 @@ import { users } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
 import { buildMessages, buildSummaryPrompt, sanitizeInput, type ConversationMode } from "./lib/prompts";
 import { get } from "./services/context";
-import { cacheGet, cacheSet, cacheDel } from "./lib/redis";
+import { redis, cacheGet, cacheSet, cacheDel } from "./lib/redis";
 import { transcribe } from "./services/whisper";
 import { complete } from "./services/groq";
 import { synthesize } from "./services/elevenlabs";
+import Redis from "ioredis";
+
+// ─── Redis pub/sub for room chat ──────────────────────────────────────────────
+// Separate ioredis client dedicated to subscriber mode
+const redisSub = new Redis({
+  host: process.env.REDIS_HOST ?? "localhost",
+  port: parseInt(process.env.REDIS_PORT ?? "6379"),
+  maxRetriesPerRequest: 1,
+  lazyConnect: true,
+  retryStrategy: (times) => Math.min(times * 100, 3000),
+});
+redisSub.on("error", () => {});
+
+// roomId → Set of SSE writer callbacks
+const roomSubscribers = new Map<string, Set<(data: string) => void>>();
+
+redisSub.on("message", (channel: string, data: string) => {
+  // channel = "room:{roomId}:events"
+  const roomId = channel.replace(/^room:/, "").replace(/:events$/, "");
+  const writers = roomSubscribers.get(roomId);
+  if (writers) writers.forEach((fn) => fn(data));
+});
+
+async function subscribeRoom(roomId: string, writer: (data: string) => void) {
+  if (!roomSubscribers.has(roomId)) {
+    roomSubscribers.set(roomId, new Set());
+    await redisSub.subscribe(`room:${roomId}:events`).catch(() => {});
+  }
+  roomSubscribers.get(roomId)!.add(writer);
+}
+
+async function unsubscribeRoom(roomId: string, writer: (data: string) => void) {
+  const writers = roomSubscribers.get(roomId);
+  if (!writers) return;
+  writers.delete(writer);
+  if (writers.size === 0) {
+    roomSubscribers.delete(roomId);
+    await redisSub.unsubscribe(`room:${roomId}:events`).catch(() => {});
+  }
+}
 
 dotenv.config();
 
@@ -131,7 +171,7 @@ app.post("/ai/stream", async (c) => {
       for await (const chunk of groqStream(messages, {
         model: body.voiceMode ? "fast" : "primary",
         temperature: 0.7,
-        maxTokens: body.voiceMode ? 160 : 512,
+        maxTokens: body.voiceMode ? 180 : 1024,
       })) {
         fullResponse += chunk;
         await s.write(`data: ${JSON.stringify({ type: "token", content: chunk })}\n\n`);
@@ -285,7 +325,7 @@ app.post("/speech/synthesize", async (c) => {
   }
 
   if (!body.text?.trim()) return c.json({ error: "text is required" }, 400);
-  if (body.text.length > 1000) return c.json({ error: "text too long (max 1000 chars)" }, 400);
+  if (body.text.length > 5000) return c.json({ error: "text too long (max 5000 chars)" }, 400);
 
   try {
     const audioBuffer = await synthesize(body.text.trim(), body.accent ?? "american");
@@ -296,6 +336,43 @@ app.post("/speech/synthesize", async (c) => {
     const message = err instanceof Error ? err.message : "Synthesis failed";
     return c.json({ error: message }, 500);
   }
+});
+
+// ─── Room SSE — real-time chat events ────────────────────────────────────────
+app.get("/rooms/:roomId/events", async (c) => {
+  // EventSource doesn't support custom headers — accept token via query param
+  const token = c.req.query("token") ?? c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  const roomId = c.req.param("roomId");
+
+  return stream(c, async (s) => {
+    c.header("Content-Type", "text/event-stream");
+    c.header("Cache-Control", "no-cache");
+    c.header("Connection", "keep-alive");
+
+    const writer = (data: string) => {
+      s.write(`data: ${data}\n\n`).catch(() => {});
+    };
+
+    await subscribeRoom(roomId, writer);
+
+    // Keep-alive ping every 25s
+    const ping = setInterval(() => {
+      s.write(": ping\n\n").catch(() => clearInterval(ping));
+    }, 25_000);
+
+    // Wait for client disconnect
+    await new Promise<void>((resolve) => {
+      s.onAbort(() => { resolve(); });
+    });
+
+    clearInterval(ping);
+    await unsubscribeRoom(roomId, writer);
+  });
 });
 
 const PORT = parseInt(process.env.PORT ?? "8099");

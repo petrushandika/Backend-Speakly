@@ -147,7 +147,7 @@ export const roomsRouter = router({
       const message: RoomChatMessage = {
         id:          crypto.randomUUID(),
         userId:      user.id,
-        displayName: user.displayName,
+        displayName: user.displayName ?? "Learner",
         text:        input.text.trim(),
         ts:          Date.now(),
       };
@@ -156,6 +156,9 @@ export const roomsRouter = router({
       await redis.rpush(key, JSON.stringify(message));
       await redis.ltrim(key, -100, -1);
       await redis.expire(key, 86_400);
+
+      // Publish to real-time subscribers
+      await redis.publish(`room:${input.roomId}:events`, JSON.stringify(message)).catch(() => {});
 
       return message;
     }),

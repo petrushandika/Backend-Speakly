@@ -226,7 +226,22 @@ ${langRules}
 6. Use domain-specific examples (${user.domain}) to make learning relevant.
 7. If student repeats same error from known weaknesses, give a brief focused mini-lesson.
 8. Be proactive — don't just answer, ENGAGE. Share opinions, ask what they think, introduce sub-topics.
-9. Remember: you are having a genuine TWO-WAY conversation, not just answering questions.`;
+9. Remember: you are having a genuine TWO-WAY conversation, not just answering questions.
+10. CRITICAL: Always finish your response completely — never leave a sentence or thought unfinished. Keep each response focused: one piece of feedback, one correction or tip, then ONE follow-up question. Do not write multiple paragraphs of teaching in a single reply.
+
+## MANDATORY Correction Format
+Whenever the student's message contains ANY grammar, vocabulary, word-choice, spelling, or sentence structure error — you MUST correct it. No exceptions.
+
+Correction rules:
+- ALWAYS append corrections at the very end of your response using EXACTLY this format:
+  "— Small note: ✏️ You said: \"[exact student error]\" → Better: \"[corrected version]\" — [one sentence explanation of why, matched to ${user.cefrLevel} level]"
+- Correct the MOST important error only (max 1 per reply) — do not overwhelm
+- If the student's message has NO errors at all, do NOT add a Small note
+- The correction must appear AFTER your conversational response and follow-up question
+- Example of correct output format:
+  "[Your conversational reply here.] [Your follow-up question here?] — Small note: ✏️ You said: \"I go to market yesterday\" → Better: \"I went to the market yesterday\" — 'went' is the past tense of 'go' for completed actions."
+- For A1/A2 students: write the explanation in Bahasa Indonesia
+- For B1+ students: write the explanation in English`;
 }
 
 export function buildMessages(
@@ -399,36 +414,48 @@ export function buildReadingTextPrompt(
     C2: "Use near-native vocabulary range. Complex rhetorical structures, idiomatic expressions. No simplification.",
   };
 
-  return `You are a language learning content creator. Generate a reading-aloud practice passage for an English learner.
+  return `You are a content writer for a language learning app. Generate a reading-aloud practice passage for an English learner at ${cefrLevel} level.
 
 Theme: ${theme}
 Domain context: ${domain}
-Target length: ${words} words total (${paragraphs} paragraph${paragraphs > 1 ? "s" : ""})
-Student CEFR level: ${cefrLevel}
+Target length: ${words} words total across ${paragraphs} paragraph${paragraphs > 1 ? "s" : ""}
 Language guidance: ${levelGuidance[cefrLevel] ?? levelGuidance["B1"]}
 
-CRITICAL LENGTH REQUIREMENT: Each paragraph MUST be at least ${Math.floor(parseInt(words.split("–")[0]) / paragraphs)} words long. Do NOT write short paragraphs. Each paragraph should be a full, substantial block of text that takes 30–60 seconds to read aloud.
+CRITICAL STYLE RULE — read this carefully:
+Write like a MAGAZINE ARTICLE, BLOG POST, or SHORT STORY. The passage must read as natural, connected English prose — not like an ESL textbook.
 
-Return ONLY valid JSON with no other text:
+STRICTLY FORBIDDEN patterns:
+- DO NOT write short, choppy sentences like: "They make a plan. The plan is important. It helps them work."
+- DO NOT repeat subjects in every sentence: "The company sells. The company buys. The company grows."
+- DO NOT write sentences under 10 words repeatedly.
+- DO NOT write a list of facts — write a flowing narrative or article.
+
+REQUIRED patterns:
+- Use varied sentence length (mix short and long naturally)
+- Use connectors: however, although, while, because, which, who, that, when, as a result
+- Each paragraph should flow from one sentence to the next with logical continuity
+- Write as if a real person is telling a story or explaining something they're passionate about
+
+CRITICAL LENGTH: Each paragraph must be at least ${Math.floor(parseInt(words.split("–")[0]) / paragraphs)} words — a full, rich block of text.
+
+Return ONLY valid JSON (no markdown, no code fences):
 {
-  "title": "Short descriptive title max 6 words",
+  "title": "Short descriptive title (max 6 words)",
   "theme": "${theme}",
   "cefrLevel": "${cefrLevel}",
-  "paragraphs": ["First paragraph — a long, detailed, naturally flowing block of text that is genuinely informative and at least 3-5 sentences.", "Second paragraph — continues the topic with new details, examples, or a different angle. Also long and substantive."],
+  "paragraphs": ["Paragraph 1 — natural flowing prose, 3-5 connected sentences, reads like a real article.", "Paragraph 2 — continues with new ideas, connected to paragraph 1. Same quality."],
   "wordCount": 0,
   "keyVocabulary": [
     {"word": "example", "definition": "brief definition in max 8 words", "indonesian": "arti kata dalam bahasa Indonesia", "ipa": "/ɪɡˈzɑːmpəl/"}
   ],
-  "readingTips": "One sentence tip for reading this passage naturally"
+  "readingTips": "One specific tip for reading this passage naturally and with good rhythm"
 }
 
 Rules:
-- Write naturally flowing prose — each paragraph is a proper, long block of text like a real article or blog post
-- NEVER write only 1–2 sentences per paragraph. A paragraph must be 3–5 sentences minimum
-- Include 3–5 key vocabulary items that appear in the passage
-- Make the content genuinely interesting and informative for someone in the ${domain} domain
-- Each paragraph must be coherent and logically connected to the next
-- wordCount must be the actual total word count of all paragraphs combined`;
+- Include 3–5 key vocabulary words that actually appear in the passage
+- Make the content genuinely interesting, not generic
+- wordCount = actual total word count of all paragraphs combined
+- Each paragraph must be coherent and logically connected to the next`;
 }
 
 // ─── Daily Speaking Challenge Topic Generator ────────────────────────────────

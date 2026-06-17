@@ -79,7 +79,7 @@ export async function* stream(
     model: resolveModel(opts.model ?? "primary"),
     messages,
     temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 512,
+    max_tokens: opts.maxTokens ?? 1024,
     stream: true,
   });
 
