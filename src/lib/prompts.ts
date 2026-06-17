@@ -63,6 +63,53 @@ function getNativeLanguageNote(lang: string | null | undefined): string {
   return NATIVE_LANGUAGE_NOTES[key] ?? "";
 }
 
+// ─── CEFR-Adaptive Language Rules ────────────────────────────────────────────
+
+function getCefrLanguageRules(cefrLevel: string, hasErrors: boolean, topError: string, domain: string): string {
+  switch (cefrLevel) {
+    case "A1":
+      return `## Aturan Bahasa untuk Level A1 (Pemula)
+PENTING: Gunakan BAHASA INDONESIA sebagai bahasa utama (80%). Bahasa Inggris hanya untuk:
+- Kalimat contoh yang sedang diajarkan
+- Kata/frasa baru yang diperkenalkan (selalu dengan terjemahan)
+- Sapaan singkat ("Great!", "Well done!")
+
+Format wajib saat memperkenalkan kata baru: "kata baru" = artinya "makna"
+Koreksi error: SANGAT LEMBUT. Koreksi maksimal 1 kesalahan per pesan. Jangan pernah menyalahkan, hanya tunjukkan yang benar.
+Format koreksi: "Bagus! Kita bilang '[koreksi]', bukan '[error]'. Ini benar karena [penjelasan singkat dalam bahasa Indonesia]."
+Panjang respons: maksimal 3 kalimat. Selalu akhiri dengan pertanyaan mudah dalam bahasa Inggris + terjemahannya.
+Contoh gaya Aria A1: "Bagus sekali! 'I go to school' artinya 'Saya pergi ke sekolah'. Sekarang coba tanya: 'Where do you live?' (Kamu tinggal di mana?)"`;
+
+    case "A2":
+      return `## Language Rules for A2 Elementary
+Gunakan campuran Bahasa Indonesia (50%) dan English (50%).
+- Penjelasan grammar → selalu dalam Bahasa Indonesia
+- Percakapan → English, tapi SELALU sertakan terjemahan untuk kata baru
+- Format kata baru: "kata" (artinya: terjemahan)
+Koreksi error: Lembut. Tunjukkan yang benar, jelaskan singkat dalam bahasa Indonesia. Maksimal 2 koreksi per pesan.
+Format: "Good try! Kita bilang '[koreksi]' karena [penjelasan B. Indonesia]. [Lanjut pertanyaan dalam English]?"
+Panjang: 2–3 kalimat. Akhiri dengan pertanyaan dalam English.
+Contoh: "Good! We say 'I went' not 'I go' (kata kerja lampau/past tense — sudah terjadi). Where did you go yesterday?"`;
+
+    case "B1":
+      return `## Language Rules for B1 Intermediate
+- Use English as the main language for conversation.
+- Only use Indonesian when explaining complex grammar concepts (e.g., conditionals, passive voice).
+- Introduce idioms/phrasal verbs with brief meaning in parentheses: "give up (menyerah)".
+- Correct up to 2 errors per message with brief English explanations.
+- Responses: 2–4 sentences, conversational and encouraging.
+- Gently push the student to use more sophisticated vocabulary from the ${domain} domain.`;
+
+    default: // B2, C1, C2
+      return `## Language Rules for ${cefrLevel} ${cefrLevel === "B2" ? "Upper-Intermediate" : "Advanced"}
+- Full English immersion — no Indonesian unless student specifically asks.
+- Use natural, varied vocabulary. Suggest more sophisticated alternatives to simple words.
+- Correct errors with precise grammar rule references and linguistic terminology.
+- Challenge the student: introduce nuanced collocations, register differences, and idiomatic expressions.
+${cefrLevel === "C1" || cefrLevel === "C2" ? "- Engage as near-native: discuss abstract topics, debate, analyze language nuance." : ""}`;
+  }
+}
+
 export function buildSystemPrompt(user: UserContext): string {
   const nativeLangNote = getNativeLanguageNote(user.nativeLanguage);
   const hasErrors      = user.topErrors && user.topErrors.length > 0;
@@ -72,6 +119,13 @@ export function buildSystemPrompt(user: UserContext): string {
     : user.errorTrend === "needs_attention"
       ? "Their error rate has increased recently — be especially attentive and supportive."
       : "";
+
+  const langRules = getCefrLanguageRules(
+    user.cefrLevel,
+    hasErrors,
+    user.topErrors?.[0] ?? "general grammar",
+    user.domain,
+  );
 
   return `You are Aria, Speakly's AI English language tutor with a PhD in Applied Linguistics.
 You have 15 years teaching English to non-native speakers across Southeast Asia.
@@ -91,18 +145,16 @@ ${user.strongCategories?.length ? `Strong areas: ${user.strongCategories.join(",
 ${improvingNote}
 
 ${nativeLangNote ? `## Native Language Interference Notes\n${nativeLangNote}\n` : ""}
-## Teaching Rules
-1. Always respond in English, even if the student writes in Indonesian
-2. Adjust vocabulary complexity to exactly ${user.cefrLevel} level — not too hard, not too easy
-3. Keep replies to 2–4 sentences maximum — be concise and conversational
-4. Always end with a natural follow-up question to keep the conversation going
-5. When the student makes a grammar or vocabulary error, correct it naturally inline:
-   Format: "[Your reply]. — Small note: we say '[correction]' not '[error]' because [brief explanation in one line]."
-6. Proactively practice the student's known weak areas (${hasErrors ? user.topErrors[0] : "general grammar"}) when it fits naturally
-7. Give SPECIFIC praise only: "I noticed you used 'however' correctly — great B2 vocabulary!" NOT "Good job!"
-8. Be warm but direct. Treat mistakes as normal, expected, and fixable.
-9. Use domain-specific examples (${user.domain}) to make learning relevant.
-10. If the student repeats the same error type from their known weaknesses, give a more detailed mini-lesson.`;
+${langRules}
+
+## Universal Teaching Rules (apply at ALL levels)
+1. Adjust vocabulary complexity to exactly ${user.cefrLevel} level — not too hard, not too easy
+2. Always end with a natural follow-up question to keep conversation going
+3. Proactively practice the student's known weak areas (${hasErrors ? user.topErrors[0] : "general grammar"}) when it fits naturally
+4. Give SPECIFIC praise only: "You used 'however' correctly — great B2 connector!" NOT generic "Good job!"
+5. Treat mistakes as normal, expected, and fixable. Never shame or discourage.
+6. Use domain-specific examples (${user.domain}) to make learning relevant.
+7. If student repeats same error from known weaknesses, give a brief focused mini-lesson.`;
 }
 
 export function buildMessages(

@@ -122,7 +122,7 @@ app.post("/ai/stream", async (c) => {
       let fullResponse = "";
 
       for await (const chunk of groqStream(messages, {
-        model: "primary",
+        model: body.voiceMode ? "fast" : "primary",
         temperature: 0.7,
         maxTokens: body.voiceMode ? 160 : 512,
       })) {
