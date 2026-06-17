@@ -6,7 +6,7 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { prettyJSON } from "hono/pretty-json";
 import { stream } from "hono/streaming";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import dotenv from "dotenv";
 import { appRouter } from "./router/_app";
 import { createContext } from "./trpc";

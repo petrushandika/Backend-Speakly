@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:setup": "tsx scripts/setup-db.ts",
+    "db:seed": "tsx scripts/seed-lessons.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
