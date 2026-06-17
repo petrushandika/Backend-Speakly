@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
@@ -87,10 +87,10 @@ export const lessonsRouter = router({
         })
         .returning();
 
-      // Add XP to user total
+      // Increment user XP
       await db
         .update(users)
-        .set({ xpTotal: db.$count(userProgress) })
+        .set({ xpTotal: sql`${users.xpTotal} + ${input.xpEarned}` })
         .where(eq(users.id, user.id));
 
       return result;

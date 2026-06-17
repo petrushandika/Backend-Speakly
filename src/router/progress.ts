@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, lte, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
@@ -9,10 +9,10 @@ export const progressRouter = router({
     const user = await db.query.users.findFirst({
       where: eq(users.authId, ctx.userId),
       columns: {
-        xpTotal: true,
+        xpTotal:    true,
         streakDays: true,
-        cefrLevel: true,
-        goal: true,
+        cefrLevel:  true,
+        goal:       true,
       },
     });
     if (!user) throw new TRPCError({ code: "NOT_FOUND" });
@@ -56,10 +56,38 @@ export const progressRouter = router({
     if (!user) return { count: 0 };
 
     const due = await db.query.flashcards.findMany({
-      where: eq(flashcards.userId, user.id),
+      where: (f, { and }) => and(
+        eq(f.userId, user.id),
+        lte(f.dueDate, new Date()),
+      ),
       columns: { id: true },
     });
 
     return { count: due.length };
+  }),
+
+  updateStreak: protectedProcedure.mutation(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { id: true, updatedAt: true, streakDays: true },
+    });
+    if (!user) throw new TRPCError({ code: "NOT_FOUND" });
+
+    const now = new Date();
+    const lastUpdate = new Date(user.updatedAt);
+    const diffDays = Math.floor((now.getTime() - lastUpdate.getTime()) / 86_400_000);
+
+    const newStreak = diffDays === 1
+      ? user.streakDays + 1
+      : diffDays === 0
+        ? user.streakDays
+        : 1;
+
+    await db
+      .update(users)
+      .set({ streakDays: newStreak, updatedAt: now })
+      .where(eq(users.id, user.id));
+
+    return { streakDays: newStreak };
   }),
 });
