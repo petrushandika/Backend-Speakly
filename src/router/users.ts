@@ -5,6 +5,7 @@ import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import { users } from "../db/schema";
 import { supabase } from "../lib/supabase";
+import { invalidate as invalidateContext } from "../services/context";
 
 const GOAL_VALUES = [
   "general", "business", "tech", "academic", "travel", "ielts",
@@ -102,6 +103,10 @@ export const usersRouter = router({
         .returning();
 
       if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Invalidate Redis context cache so AI picks up new settings immediately
+      await invalidateContext(updated.id).catch(() => {});
+
       return updated;
     }),
 
