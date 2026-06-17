@@ -7,13 +7,24 @@ function getApiKey(): string {
 }
 
 function getVoiceId(accent: string): string {
+  const US = process.env.ELEVENLABS_VOICE_US ?? "EXAVITQu4vr4xnSDxMaL";
+  const UK = process.env.ELEVENLABS_VOICE_UK ?? "onwK4e9ZLuTAKqWW03F9";
+  const AU = process.env.ELEVENLABS_VOICE_AU ?? "EXAVITQu4vr4xnSDxMaL";
+
   const voices: Record<string, string> = {
-    american:   process.env.ELEVENLABS_VOICE_US  ?? "EXAVITQu4vr4xnSDxMaL",
-    british:    process.env.ELEVENLABS_VOICE_UK  ?? "onwK4e9ZLuTAKqWW03F9",
-    australian: process.env.ELEVENLABS_VOICE_AU  ?? "EXAVITQu4vr4xnSDxMaL",
-    neutral:    process.env.ELEVENLABS_VOICE_US  ?? "EXAVITQu4vr4xnSDxMaL",
+    american:     US,
+    british:      UK,
+    australian:   AU,
+    neutral:      US,
+    // Additional accents — configure via env vars, fall back to nearest native accent
+    indian:       process.env.ELEVENLABS_VOICE_IN ?? US,
+    irish:        process.env.ELEVENLABS_VOICE_IE ?? UK,
+    canadian:     process.env.ELEVENLABS_VOICE_CA ?? US,
+    newzealand:   process.env.ELEVENLABS_VOICE_NZ ?? AU,
+    south_african: process.env.ELEVENLABS_VOICE_ZA ?? UK,
+    singaporean:  process.env.ELEVENLABS_VOICE_SG ?? US,
   };
-  return voices[accent] ?? voices.american;
+  return voices[accent] ?? US;
 }
 
 export async function synthesize(

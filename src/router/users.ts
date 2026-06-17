@@ -6,8 +6,15 @@ import { db } from "../db";
 import { users } from "../db/schema";
 import { supabase } from "../lib/supabase";
 
-const GOAL_VALUES   = ["general", "business", "tech", "academic", "travel", "ielts"] as const;
-const ACCENT_VALUES = ["american", "british", "australian", "neutral"] as const;
+const GOAL_VALUES = [
+  "general", "business", "tech", "academic", "travel", "ielts",
+  "medical", "finance", "creative", "education", "hospitality", "law",
+] as const;
+
+const ACCENT_VALUES = [
+  "american", "british", "australian", "neutral",
+  "indian", "irish", "canadian", "newzealand", "south_african", "singaporean",
+] as const;
 const CEFR_VALUES   = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
 export const usersRouter = router({
@@ -66,12 +73,25 @@ export const usersRouter = router({
     .mutation(async ({ ctx, input }) => {
       const set: Record<string, unknown> = { updatedAt: new Date() };
 
+      // goal → also derive domain for AI context
+      const GOAL_DOMAIN: Record<string, string> = {
+        general:     "general",     business:    "business",
+        tech:        "technology",  academic:    "academic",
+        travel:      "travel",      ielts:       "academic",
+        medical:     "medical",     finance:     "finance",
+        creative:    "creative",    education:   "education",
+        hospitality: "hospitality", law:         "law",
+      };
+
       if (input.displayName      != null) set.displayName      = input.displayName;
       if (input.bio              !== undefined) set.bio              = input.bio;
       if (input.nativeLanguage   !== undefined) set.nativeLanguage   = input.nativeLanguage;
       if (input.country          !== undefined) set.country          = input.country;
       if (input.avatarUrl        !== undefined) set.avatarUrl        = input.avatarUrl;
-      if (input.goal             != null) set.goal             = input.goal;
+      if (input.goal             != null) {
+        set.goal   = input.goal;
+        set.domain = GOAL_DOMAIN[input.goal] ?? input.goal;
+      }
       if (input.accentPreference != null) set.accentPreference = input.accentPreference;
       if (input.cefrLevel        != null) set.cefrLevel        = input.cefrLevel;
 
