@@ -290,3 +290,87 @@ Return ONLY valid JSON:
 
 Rules: use real-world sentences, vary question types, include at least 1 easy question.`;
 }
+
+// ─── Reading Aloud Text Generator ────────────────────────────────────────────
+
+export function buildReadingTextPrompt(
+  theme: string,
+  paragraphs: number,
+  cefrLevel: string,
+  domain: string,
+): string {
+  const wordTargets: Record<string, string> = {
+    "1": "150–200",
+    "2": "300–400",
+    "3": "500–620",
+  };
+  const words = wordTargets[String(paragraphs)] ?? "300–400";
+
+  const levelGuidance: Record<string, string> = {
+    A1: "Use only the most common 500 English words. Simple present/past tense only. Short sentences (max 10 words each). No complex grammar.",
+    A2: "Use common vocabulary. Simple past and present perfect allowed. Sentences max 15 words each. Avoid idioms.",
+    B1: "Use intermediate vocabulary. Varied tenses, some compound sentences. Introduce 2–3 useful collocations naturally.",
+    B2: "Use upper-intermediate vocabulary. Complex sentences, passive voice, relative clauses. Include idiomatic phrases.",
+    C1: "Use advanced vocabulary. Nuanced syntax, subordinate clauses. Include sophisticated collocations and formal register.",
+    C2: "Use near-native vocabulary range. Complex rhetorical structures, idiomatic expressions. No simplification.",
+  };
+
+  return `You are a language learning content creator. Generate a reading-aloud practice passage for an English learner.
+
+Theme: ${theme}
+Domain context: ${domain}
+Target length: ${words} words total (${paragraphs} paragraph${paragraphs > 1 ? "s" : ""})
+Student CEFR level: ${cefrLevel}
+Language guidance: ${levelGuidance[cefrLevel] ?? levelGuidance["B1"]}
+
+CRITICAL LENGTH REQUIREMENT: Each paragraph MUST be at least ${Math.floor(parseInt(words.split("–")[0]) / paragraphs)} words long. Do NOT write short paragraphs. Each paragraph should be a full, substantial block of text that takes 30–60 seconds to read aloud.
+
+Return ONLY valid JSON with no other text:
+{
+  "title": "Short descriptive title max 6 words",
+  "theme": "${theme}",
+  "cefrLevel": "${cefrLevel}",
+  "paragraphs": ["First paragraph — a long, detailed, naturally flowing block of text that is genuinely informative and at least 3-5 sentences.", "Second paragraph — continues the topic with new details, examples, or a different angle. Also long and substantive."],
+  "wordCount": 0,
+  "keyVocabulary": [
+    {"word": "example", "definition": "brief definition in max 8 words", "indonesian": "arti kata dalam bahasa Indonesia", "ipa": "/ɪɡˈzɑːmpəl/"}
+  ],
+  "readingTips": "One sentence tip for reading this passage naturally"
+}
+
+Rules:
+- Write naturally flowing prose — each paragraph is a proper, long block of text like a real article or blog post
+- NEVER write only 1–2 sentences per paragraph. A paragraph must be 3–5 sentences minimum
+- Include 3–5 key vocabulary items that appear in the passage
+- Make the content genuinely interesting and informative for someone in the ${domain} domain
+- Each paragraph must be coherent and logically connected to the next
+- wordCount must be the actual total word count of all paragraphs combined`;
+}
+
+// ─── Daily Speaking Challenge Topic Generator ────────────────────────────────
+
+export function buildSpeakingChallengePrompt(cefrLevel: string, domain: string): string {
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  return `Generate a daily speaking challenge topic for an English learner.
+
+Student CEFR level: ${cefrLevel}
+Domain focus: ${domain}
+Today's date: ${today}
+
+Return ONLY valid JSON with no other text:
+{
+  "topic": "Describe a recent challenge you faced at work and how you solved it.",
+  "prompt": "Talk for 60 seconds about this topic. Try to use the present perfect tense.",
+  "targetSkill": "present_perfect",
+  "difficulty": "medium",
+  "hints": ["Use phrases like: I have recently...", "Try to include: However, I managed to..."],
+  "exampleOpener": "Recently, I have been working on a project that..."
+}
+
+Rules:
+- Topic must be clearly answerable in 60 seconds of natural speech
+- Must be relevant and interesting for someone in the ${domain} domain
+- Hints must give concrete phrases to use, not vague advice
+- difficulty must be one of: easy, medium, hard
+- targetSkill must be one of: fluency, vocabulary, grammar, present_perfect, past_tense, conditionals, pronunciation`;
+}

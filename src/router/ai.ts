@@ -11,6 +11,8 @@ import {
   buildFeedbackPrompt,
   buildGrammarPrompt,
   buildQuizPrompt,
+  buildReadingTextPrompt,
+  buildSpeakingChallengePrompt,
   sanitizeInput,
 } from "../lib/prompts";
 
@@ -320,5 +322,87 @@ Return:
       totalLastWeek: errLastWeek,
       topCategory:   Object.entries(frequency).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null,
     };
+  }),
+
+  // ── Generate reading-aloud practice text ──────────────────────────────────
+  generateReadingText: protectedProcedure
+    .input(
+      z.object({
+        theme:      z.enum(["business", "technology", "travel", "daily_life", "science", "culture"]),
+        paragraphs: z.number().int().min(1).max(3).default(2),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { cefrLevel: true, domain: true },
+      });
+
+      const prompt = buildReadingTextPrompt(
+        input.theme,
+        input.paragraphs,
+        user?.cefrLevel ?? "B1",
+        user?.domain ?? "general",
+      );
+
+      const raw = await complete([{ role: "user", content: prompt }], {
+        model: "primary",
+        temperature: 0.6,
+        maxTokens: 1600,
+      });
+
+      try {
+        return JSON.parse(raw) as {
+          title: string;
+          theme: string;
+          cefrLevel: string;
+          paragraphs: string[];
+          wordCount: number;
+          keyVocabulary: Array<{ word: string; definition: string; indonesian: string; ipa: string }>;
+          readingTips: string;
+        };
+      } catch {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned invalid response" });
+      }
+    }),
+
+  // ── Get / generate daily speaking challenge ───────────────────────────────
+  getDailySpeakingChallenge: protectedProcedure.query(async ({ ctx }) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.authId, ctx.userId),
+      columns: { cefrLevel: true, domain: true },
+    });
+
+    const prompt = buildSpeakingChallengePrompt(
+      user?.cefrLevel ?? "B1",
+      user?.domain ?? "general",
+    );
+
+    const raw = await complete([{ role: "user", content: prompt }], {
+      model: "fast",
+      temperature: 0.7,
+      maxTokens: 300,
+    });
+
+    try {
+      return JSON.parse(raw) as {
+        topic: string;
+        prompt: string;
+        targetSkill: string;
+        difficulty: string;
+        hints: string[];
+        exampleOpener: string;
+      };
+    } catch {
+      // Fallback challenge if AI fails
+      return {
+        topic: "Tell me about your typical workday.",
+        prompt: "Talk for 60 seconds about what you do at work or school every day.",
+        targetSkill: "fluency",
+        difficulty: "easy",
+        hints: ["Start with: Every day, I...", "Use present simple tense for routines"],
+        exampleOpener: "Every day, I usually start my morning by...",
+      };
+    }
   }),
 });
