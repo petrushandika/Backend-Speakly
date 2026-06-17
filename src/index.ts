@@ -14,9 +14,11 @@ import { supabase } from "./lib/supabase";
 import { db } from "./db";
 import { users } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
-import { buildMessages, sanitizeInput } from "./lib/prompts";
+import { buildMessages, buildSummaryPrompt, sanitizeInput, type ConversationMode } from "./lib/prompts";
 import { get } from "./services/context";
+import { cacheGet, cacheSet, cacheDel } from "./lib/redis";
 import { transcribe } from "./services/whisper";
+import { complete } from "./services/groq";
 import { synthesize } from "./services/elevenlabs";
 
 dotenv.config();
@@ -59,6 +61,7 @@ app.post("/ai/stream", async (c) => {
     message: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     voiceMode?: boolean;
+    mode?: ConversationMode;
   };
   try {
     body = await c.req.json();
@@ -73,24 +76,27 @@ app.post("/ai/stream", async (c) => {
     columns: { id: true },
   });
 
-  // 4. Build rich context (Redis-cached, 5 min TTL)
+  // 4. Build rich context (Redis-cached, 5 min TTL) + long-term memory
   let userCtx;
   if (user) {
     try {
       const ctx = await get(user.id);
+      const memoryKey = `conv_memory:${user.id}`;
+      const memory = await cacheGet<{ summary: string }>(memoryKey);
       userCtx = {
-        displayName:      ctx.displayName,
-        cefrLevel:        ctx.cefrLevel,
-        goal:             ctx.goal,
-        domain:           ctx.domain,
-        accentPreference: ctx.accentPreference,
-        topErrors:        ctx.topErrors,
-        nativeLanguage:   ctx.nativeLanguage,
-        errorTrend:       ctx.errorTrend,
-        weakCategories:   ctx.weakCategories,
-        strongCategories: ctx.strongCategories,
-        vocabularySize:   ctx.vocabularySize,
-        avgMastery:       ctx.avgMastery,
+        displayName:          ctx.displayName,
+        cefrLevel:            ctx.cefrLevel,
+        goal:                 ctx.goal,
+        domain:               ctx.domain,
+        accentPreference:     ctx.accentPreference,
+        topErrors:            ctx.topErrors,
+        nativeLanguage:       ctx.nativeLanguage,
+        errorTrend:           ctx.errorTrend,
+        weakCategories:       ctx.weakCategories,
+        strongCategories:     ctx.strongCategories,
+        vocabularySize:       ctx.vocabularySize,
+        avgMastery:           ctx.avgMastery,
+        conversationSummary:  memory?.summary ?? null,
       };
     } catch {
       userCtx = {
@@ -110,6 +116,7 @@ app.post("/ai/stream", async (c) => {
     body.history ?? [],
     sanitizeInput(body.message),
     body.voiceMode,
+    body.mode,
   );
 
   // 6. Stream from Groq via SSE
@@ -136,6 +143,105 @@ app.post("/ai/stream", async (c) => {
       await s.write(`data: ${JSON.stringify({ type: "error", message })}\n\n`);
     }
   });
+});
+
+// ─── Summarize conversation & store as long-term memory ──────────────────────
+app.post("/ai/summarize", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  let body: {
+    messages: Array<{ role: "user" | "assistant"; content: string }>;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  if (!body.messages || body.messages.length < 4) {
+    return c.json({ stored: false, reason: "Not enough messages to summarize" });
+  }
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.authId, authData.user.id),
+    columns: { id: true, displayName: true, cefrLevel: true },
+  });
+  if (!user) return c.json({ error: "User not found" }, 404);
+
+  const prompt = buildSummaryPrompt(body.messages, user.displayName, user.cefrLevel);
+  const raw = await complete([{ role: "user", content: prompt }], {
+    model: "fast",
+    temperature: 0.3,
+    maxTokens: 400,
+  });
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return c.json({ stored: false, reason: "Could not parse summary" });
+  }
+
+  const memoryKey = `conv_memory:${user.id}`;
+  // Append to existing memory, keep last 3 sessions worth of memory
+  const existing = await cacheGet<{ summaries: unknown[]; summary: string }>(memoryKey);
+  const summaries = existing?.summaries ?? [];
+  summaries.push(parsed);
+  if (summaries.length > 3) summaries.splice(0, summaries.length - 3);
+
+  // Build a combined readable summary for the system prompt
+  const combinedNote = summaries
+    .map((s) => {
+      const entry = s as Record<string, unknown>;
+      return [
+        entry.aria_memory_note,
+        entry.personal_details ? `Personal: ${entry.personal_details}` : null,
+        Array.isArray(entry.student_interests) && entry.student_interests.length ? `Interests: ${(entry.student_interests as string[]).join(", ")}` : null,
+        Array.isArray(entry.recurring_struggles) && entry.recurring_struggles.length ? `Still working on: ${(entry.recurring_struggles as string[]).join(", ")}` : null,
+      ].filter(Boolean).join(" | ");
+    })
+    .join("\n");
+
+  await cacheSet(memoryKey, { summaries, summary: combinedNote }, 30 * 24 * 60 * 60); // 30 days
+
+  return c.json({ stored: true, note: parsed.aria_memory_note });
+});
+
+// ─── Get/clear long-term memory ───────────────────────────────────────────────
+app.get("/ai/memory", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.authId, authData.user.id),
+    columns: { id: true },
+  });
+  if (!user) return c.json({ error: "User not found" }, 404);
+
+  const memory = await cacheGet<{ summaries: unknown[]; summary: string }>(`conv_memory:${user.id}`);
+  return c.json({ memory: memory ?? null });
+});
+
+app.delete("/ai/memory", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.authId, authData.user.id),
+    columns: { id: true },
+  });
+  if (!user) return c.json({ error: "User not found" }, 404);
+
+  await cacheDel(`conv_memory:${user.id}`);
+  return c.json({ cleared: true });
 });
 
 // ─── STT Transcription — Whisper ─────────────────────────────────────────────
