@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config(); // Must be first — loads env vars before any service initializes
+
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { trpcServer } from "@hono/trpc-server";
@@ -6,12 +9,11 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { prettyJSON } from "hono/pretty-json";
 import { stream } from "hono/streaming";
-import { eq } from "drizzle-orm";
-import dotenv from "dotenv";
 import { appRouter } from "./router/_app";
 import { createContext } from "./trpc";
 import { supabase } from "./lib/supabase";
 import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { users } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
 import { buildMessages, buildSummaryPrompt, sanitizeInput, type ConversationMode } from "./lib/prompts";
@@ -61,8 +63,6 @@ async function unsubscribeRoom(roomId: string, writer: (data: string) => void) {
   }
 }
 
-dotenv.config();
-
 const app = new Hono();
 
 app.use("*", logger());
@@ -96,7 +96,7 @@ app.post("/ai/stream", async (c) => {
   const { data: authData, error: authError } = await supabase.auth.getUser(token);
   if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
 
-  // 2. Parse body
+  // 2. Parse and validate body
   let body: {
     message: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -108,7 +108,22 @@ app.post("/ai/stream", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
+
   if (!body.message?.trim()) return c.json({ error: "message is required" }, 400);
+  if (body.message.length > 4000) return c.json({ error: "message too long" }, 400);
+
+  // Validate mode against allowed values
+  const VALID_MODES: ConversationMode[] = ["free_talk", "roleplay", "grammar_drill", "debate", "storytelling", "interview_prep"];
+  if (body.mode && !VALID_MODES.includes(body.mode)) {
+    return c.json({ error: "invalid mode" }, 400);
+  }
+
+  // Sanitize and cap history to last 20 exchanges to control token cost
+  const rawHistory = Array.isArray(body.history) ? body.history : [];
+  const safeHistory = rawHistory
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .slice(-20)
+    .map((m) => ({ role: m.role, content: sanitizeInput(m.content) }));
 
   // 3. Get user profile
   const user = await db.query.users.findFirst({
@@ -153,7 +168,7 @@ app.post("/ai/stream", async (c) => {
 
   const messages = buildMessages(
     userCtx,
-    body.history ?? [],
+    safeHistory,
     sanitizeInput(body.message),
     body.voiceMode,
     body.mode,
@@ -297,6 +312,11 @@ app.post("/speech/transcribe", async (c) => {
 
   if (!file || !(file instanceof File)) {
     return c.json({ error: "audio field (File) is required" }, 400);
+  }
+
+  // 25 MB limit — prevents abuse of the Whisper endpoint
+  if (file.size > 25 * 1024 * 1024) {
+    return c.json({ error: "audio file too large (max 25 MB)" }, 413);
   }
 
   try {
