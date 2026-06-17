@@ -1,13 +1,8 @@
 import Redis from "ioredis";
 
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-
-if (!redisUrl) {
-  throw new Error("Missing UPSTASH_REDIS_REST_URL");
-}
-
-export const redis = new Redis(redisUrl, {
-  tls: {},
+export const redis = new Redis({
+  host: process.env.REDIS_HOST ?? "localhost",
+  port: parseInt(process.env.REDIS_PORT ?? "6379"),
   maxRetriesPerRequest: 3,
   lazyConnect: true,
 });
