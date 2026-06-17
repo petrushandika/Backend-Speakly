@@ -15,6 +15,8 @@ import { db } from "./db";
 import { users, userErrors } from "./db/schema";
 import { stream as groqStream } from "./services/groq";
 import { buildMessages, sanitizeInput } from "./lib/prompts";
+import { transcribe } from "./services/whisper";
+import { synthesize } from "./services/elevenlabs";
 
 dotenv.config();
 
@@ -130,18 +132,58 @@ app.post("/ai/stream", async (c) => {
   });
 });
 
-// ─── TTS Synthesis — Sprint 9 ────────────────────────────────────────────────
-app.post("/speech/synthesize", async (c) => {
-  const token = c.req.header("Authorization")?.replace("Bearer ", "");
-  if (!token) return c.json({ error: "Unauthorized" }, 401);
-  return c.json({ message: "TTS — Sprint 9" });
-});
-
-// ─── STT Transcription — Sprint 4 ───────────────────────────────────────────
+// ─── STT Transcription — Whisper ─────────────────────────────────────────────
 app.post("/speech/transcribe", async (c) => {
   const token = c.req.header("Authorization")?.replace("Bearer ", "");
   if (!token) return c.json({ error: "Unauthorized" }, 401);
-  return c.json({ transcript: "" });
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  const formData = await c.req.formData();
+  const file = formData.get("audio");
+
+  if (!file || !(file instanceof File)) {
+    return c.json({ error: "audio field (File) is required" }, 400);
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const transcript = await transcribe(buffer, file.name);
+    return c.json({ transcript });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Transcription failed";
+    return c.json({ error: message }, 500);
+  }
+});
+
+// ─── TTS Synthesis — ElevenLabs ──────────────────────────────────────────────
+app.post("/speech/synthesize", async (c) => {
+  const token = c.req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) return c.json({ error: "Invalid token" }, 401);
+
+  let body: { text: string; accent?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  if (!body.text?.trim()) return c.json({ error: "text is required" }, 400);
+  if (body.text.length > 1000) return c.json({ error: "text too long (max 1000 chars)" }, 400);
+
+  try {
+    const audioBuffer = await synthesize(body.text.trim(), body.accent ?? "american");
+    c.header("Content-Type", "audio/mpeg");
+    c.header("Content-Length", String(audioBuffer.length));
+    return c.body(new Uint8Array(audioBuffer));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Synthesis failed";
+    return c.json({ error: message }, 500);
+  }
 });
 
 const PORT = parseInt(process.env.PORT ?? "8099");
