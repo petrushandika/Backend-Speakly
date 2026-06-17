@@ -359,14 +359,23 @@ const LESSONS = [
       sections: [
         {
           type: "explanation",
-          text: "Dalam bahasa Inggris, struktur dasar kalimat mengikuti pola **S-P-O-K** (Subjek, Predikat, Objek, Keterangan) atau **S-V-O-A** (Subject, Verb, Object, Adverb).\n\n- **Subject (Subjek)**: Siapa pelaku tindakan (I, You, She, He, John).\n- **Predicate/Verb (Predikat/Kata Kerja)**: Apa tindakannya (eat, study, go).\n- **Object (Objek)**: Siapa/apa penerima tindakan (an apple, English).\n- **Adverb (Keterangan)**: Di mana, kapan, atau bagaimana tindakan terjadi (in the kitchen, every day).",
+          text: "Dalam bahasa Inggris, struktur dasar kalimat mengikuti pola **S-P-O-K** (Subjek, Predikat, Objek, Keterangan):\n\n```\nSubject  +  Verb/Predicate  +  Object  +  Adverb/Keterangan\n-------     --------------     ------     -----------------\n   S              P              O                K\n```\n\n- **Subject (Subjek)**: Siapa pelaku tindakan (I, You, She, He, John).\n- **Predicate/Verb (Predikat/Kata Kerja)**: Apa tindakannya (eat, study, go).\n- **Object (Objek)**: Siapa/apa penerima tindakan (an apple, English).\n- **Adverb (Keterangan)**: Di mana, kapan, atau bagaimana tindakan terjadi (in the kitchen, every day).",
         },
         {
           type: "examples",
           items: [
-            { en: "I (S) study (P) English (O) every day (K).", id: "Saya belajar bahasa Inggris setiap hari." },
-            { en: "She (S) eats (P) an apple (O) in the morning (K).", id: "Dia makan sebuah apel di pagi hari." },
-            { en: "They (S) play (P) football (O) at the park (K).", id: "Mereka bermain sepak bola di taman." },
+            {
+              en: "I       study    English    every day.\n-       -----    -------    ---------\nS         P         O           K",
+              id: "Saya belajar bahasa Inggris setiap hari."
+            },
+            {
+              en: "She     eats     an apple   in the morning.\n---     ----     --------   --------------\nS        P          O             K",
+              id: "Dia makan sebuah apel di pagi hari."
+            },
+            {
+              en: "They    play     football   at the park.\n----    ----     --------   -----------\nS        P          O            K",
+              id: "Mereka bermain sepak bola di taman."
+            },
           ],
         },
         {

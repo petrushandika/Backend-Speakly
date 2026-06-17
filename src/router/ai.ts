@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import { users, userErrors, lessons, userProgress } from "../db/schema";
+import { cacheGet, cacheSet } from "../lib/redis";
 import { complete } from "../services/groq";
 import { get, invalidate } from "../services/context";
 import { scorePronunciation } from "../lib/pronunciation";
@@ -276,6 +277,17 @@ Return:
     });
     if (!user) return null;
 
+    const cacheKey = `analytics:errors:${user.id}`;
+    const cached = await cacheGet<{
+      frequency: Record<string, number>;
+      dailyCounts: Record<string, number>;
+      trend: string;
+      totalThisWeek: number;
+      totalLastWeek: number;
+      topCategory: string | null;
+    }>(cacheKey);
+    if (cached) return cached;
+
     const twoWeeksAgo = new Date(Date.now() - 14 * 86_400_000);
 
     const allErrors = await db.query.userErrors.findMany({
@@ -314,7 +326,7 @@ Return:
         ? "needs_attention"
         : "stable";
 
-    return {
+    const result = {
       frequency,
       dailyCounts,
       trend,
@@ -322,6 +334,9 @@ Return:
       totalLastWeek: errLastWeek,
       topCategory:   Object.entries(frequency).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null,
     };
+
+    await cacheSet(cacheKey, result, 5 * 60);
+    return result;
   }),
 
   // ── Generate reading-aloud practice text ──────────────────────────────────

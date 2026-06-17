@@ -165,8 +165,14 @@ export function buildMessages(
 ): Array<{ role: "system" | "user" | "assistant"; content: string }> {
   let systemPrompt = buildSystemPrompt(user);
   if (voiceMode) {
-    systemPrompt +=
-      "\n\nVOICE MODE: You are speaking aloud. Reply in 1–2 short spoken sentences only. No bullet points, no markdown, no lists. Natural conversational English only.";
+    const isBeginnerLevel = user.cefrLevel === "A1" || user.cefrLevel === "A2";
+    if (isBeginnerLevel) {
+      systemPrompt +=
+        "\n\nVOICE MODE: Kamu sedang berbicara langsung. Balas dengan 1–2 kalimat pendek saja. Tidak ada bullet points atau markdown. Pertahankan aturan bahasa Indonesia sesuai level.";
+    } else {
+      systemPrompt +=
+        "\n\nVOICE MODE: You are speaking aloud. Reply in 1–2 short spoken sentences only. No bullet points, no markdown, no lists. Natural conversational English only.";
+    }
   }
   const sanitized = sanitizeInput(newMessage);
 

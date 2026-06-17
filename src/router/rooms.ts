@@ -5,6 +5,15 @@ import { router, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import { rooms, roomMembers, users } from "../db/schema";
 import { sql } from "drizzle-orm";
+import { redis } from "../lib/redis";
+
+interface RoomChatMessage {
+  id: string;
+  userId: string;
+  displayName: string;
+  text: string;
+  ts: number;
+}
 
 export const roomsRouter = router({
   getActive: protectedProcedure.query(async () => {
@@ -108,5 +117,46 @@ export const roomsRouter = router({
         .where(and(eq(rooms.id, input.roomId), eq(rooms.hostId, user.id)));
 
       return { success: true };
+    }),
+
+  getMessages: protectedProcedure
+    .input(z.object({ roomId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      try {
+        const raw = await redis.lrange(`room:${input.roomId}:chat`, -50, -1);
+        return raw.map((r) => JSON.parse(r) as RoomChatMessage);
+      } catch {
+        return [];
+      }
+    }),
+
+  sendMessage: protectedProcedure
+    .input(z.object({ roomId: z.string().uuid(), text: z.string().min(1).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.query.users.findFirst({
+        where: eq(users.authId, ctx.userId),
+        columns: { id: true, displayName: true },
+      });
+      if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const membership = await db.query.roomMembers.findFirst({
+        where: and(eq(roomMembers.roomId, input.roomId), eq(roomMembers.userId, user.id)),
+      });
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "You are not in this room" });
+
+      const message: RoomChatMessage = {
+        id:          crypto.randomUUID(),
+        userId:      user.id,
+        displayName: user.displayName,
+        text:        input.text.trim(),
+        ts:          Date.now(),
+      };
+
+      const key = `room:${input.roomId}:chat`;
+      await redis.rpush(key, JSON.stringify(message));
+      await redis.ltrim(key, -100, -1);
+      await redis.expire(key, 86_400);
+
+      return message;
     }),
 });
